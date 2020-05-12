@@ -2065,6 +2065,15 @@ Note that even proved ones get overwritten"
 	  thstring)
       t t))))
 
+(defun prettyprint-dedukti (theoryref)
+  (with-pvs-file (fname thname) theoryref
+    (let ((*no-comments* nil)
+          (*unparse-expanded* t)
+          (*xt-periods-allowed* t))
+      (let ((theory  (get-typechecked-theory (or thname fname)))
+            (outfile (format nil "/tmp/~a.tmp" thname)))
+        (to-dk3 theory outfile)))))
+
 (defun ppe (theory)
   (prettyprint-expanded theory))
 

@@ -34,6 +34,7 @@
 ;; prettyprint-theory      - prettyprint-theory
 ;; prettyprint-pvs-file    - prettyprint-pvs-file
 ;; prettyprint-expanded    - prettyprint-expanded
+;; prettyprint-dedukti     - prettyprint-dedukti
 ;; show-tccs               - show-tccs
 ;; view-prelude-file       - N/A
 ;; view-prelude-theory     - N/A
@@ -310,25 +311,35 @@ command."
   (interactive (complete-theory-name "Prettyprint-expanded theory named: "))
   (pvs-bury-output)
   (let* ((parts (split-string theoryref "#"))
-	 (theoryname (or (cadr parts) (car parts)))
-	 (file (cdr (assoc theoryname (pvs-collect-theories)))))
+         (theoryname (or (cadr parts) (car parts)))
+         (file (cdr (assoc theoryname (pvs-collect-theories)))))
     (unless (or file
-		(setq file (when (cadr parts) (car parts))))
+                (setq file (when (cadr parts) (car parts))))
       (error "File for theoryname %s not found" theoryname))
     (message "Creating the %s.ppe buffer..." theoryname)
     (pvs-send-and-wait (format "(prettyprint-expanded \"%s\")" theoryref)
-		       nil (pvs-get-abbreviation 'prettyprint-expanded)
-		       'dont-care)
+                       nil (pvs-get-abbreviation 'prettyprint-expanded)
+                       'dont-care)
     (message "")
     (let ((buf (get-buffer (format "%s.ppe" theoryname))))
       (when buf
-	(with-current-buffer buf
-	  (set (make-local-variable 'pvs-context-sensitive) t)
-	  (set (make-local-variable 'from-pvs-theory) theoryname)
-	  (let ((mtime (get-theory-modtime theoryname)))
-	    (set (make-local-variable 'pvs-theory-modtime) mtime))
-	  (pvs-view-mode)
-	  (use-local-map pvs-show-formulas-map))))))
+        (with-current-buffer buf
+          (set (make-local-variable 'pvs-context-sensitive) t)
+          (set (make-local-variable 'from-pvs-theory) theoryname)
+          (let ((mtime (get-theory-modtime theoryname)))
+            (set (make-local-variable 'pvs-theory-modtime) mtime))
+          (pvs-view-mode)
+          (use-local-map pvs-show-formulas-map))))))
+
+(defpvs prettyprint-dedukti tcc (theoryref)
+  "View the Dedukti version of a theory."
+  (interactive (complete-theory-name "Prettyprint-dedukti theory named: "))
+  (pvs-bury-output)
+  (let* ((parts (split-string theoryref "#"))
+         (theoryname (or (cadr parts) (car parts))))
+    (message "Writing /tmp/%s.lp..." theoryname)
+    (pvs-send (format "(prettyprint-dedukti \"%s\")" theoryref)
+              nil "pp-dk3")))
 
 (defpvs show-tccs tcc (theoryref &optional arg)
   "Shows all the TCCs of the indicated theory
@@ -342,29 +353,29 @@ With a nonnegative argument (e.g., C-u or M-0), shows only the unproved TCCs.
 With a negative argument (M--), shows all TCCs, including comments for
 trivial TCCs."
   (interactive (append (complete-theory-name "Show TCCs of theory named: ")
-		       (list (when current-prefix-arg
-			       (prefix-numeric-value current-prefix-arg)))))
+                       (list (when current-prefix-arg
+                               (prefix-numeric-value current-prefix-arg)))))
   (let ((theory (car (last (string-split ?# theoryref)))))
     (save-some-pvs-buffers)
     (message "Creating the %s.tccs buffer..." theory)
     (pvs-send-and-wait (format "(show-tccs \"%s\" %s)" theoryref arg)
-		       nil (pvs-get-abbreviation 'show-tccs)
-		       'dont-care)
+                       nil (pvs-get-abbreviation 'show-tccs)
+                       'dont-care)
     (let ((pvs-file (buffer-file-name))
-	  (buf (get-buffer (format "%s.tccs" theory))))
+          (buf (get-buffer (format "%s.tccs" theory))))
       (when buf
-	(save-excursion
-	  (let ((mtime (get-theory-modtime theoryref)))
-	    (with-current-buffer buf
-	      (message "")
-	      (set (make-local-variable 'pvs-context-sensitive) t)
-	      (set (make-local-variable 'from-pvs-file) pvs-file)
-	      (set (make-local-variable 'from-pvs-theory) theory)
-	      (set (make-local-variable 'pvs-theory-modtime) mtime)
-	      (set-tcc-buttons)
-	      (pvs-view-mode)
-	      (use-local-map pvs-show-formulas-map))))
-	(switch-to-buffer-other-window buf)))))
+        (save-excursion
+          (let ((mtime (get-theory-modtime theoryref)))
+            (with-current-buffer buf
+              (message "")
+              (set (make-local-variable 'pvs-context-sensitive) t)
+              (set (make-local-variable 'from-pvs-file) pvs-file)
+              (set (make-local-variable 'from-pvs-theory) theory)
+              (set (make-local-variable 'pvs-theory-modtime) mtime)
+              (set-tcc-buttons)
+              (pvs-view-mode)
+              (use-local-map pvs-show-formulas-map))))
+        (switch-to-buffer-other-window buf)))))
 
 (define-button-type 'tcc-cause-button
     'action 'pvs-mouse-goto-tcc-cause

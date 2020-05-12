@@ -1,0 +1,23 @@
+simple: THEORY
+BEGIN
+  naturals: TYPE
+  nat: TYPE = naturals
+  zero: nat
+  succ: [nat -> nat]
+
+  z_not_succ: AXIOM FORALL (n: nat): succ(n) /= zero
+
+  nznat: TYPE = { n: nat | n /= zero }
+
+  n, m: VAR nat
+  z_not_succ2: AXIOM succ(n) /= zero
+END simple
+
+funs[d: TYPE, r: TYPE]: THEORY
+BEGIN
+  f: [d -> r]
+END funs
+groups[T: TYPE]: THEORY
+BEGIN
+  group: TYPE
+END groups
