@@ -5,7 +5,28 @@
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t))
+      (format stream "~{~/pvs:pp-reqopen/~&~}"
+              '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins"))
       (pp-dk stream obj))))
+
+(defparameter *ctx-var* nil
+  "Successive VAR declarations (n: VAR nat).")
+
+(defun pp-sym (stream sym &optional colon-p at-sign-p)
+  "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
+necessary."
+  (flet ((sane-charp (c)
+           (cond
+             ((alphanumericp c) t)
+             ((char= c #\_) t)
+             (t nil))))
+    (if (every #'sane-charp (string sym))
+        (format stream "~(~a~)" sym)
+        (format stream "{|~(~a~)|}" sym))))
+
+(defun pp-reqopen (stream mod &optional colon-p at-sign-p)
+  "Prints a require open module MOD directive on stream STREAM."
+  (format stream "require open personoj.encodings.~a" mod))
 
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
@@ -26,23 +47,24 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   "t: TYPE."
   (print "type decl")
   (with-slots (id) decl
-    (format stream "constant symbol ~a: θ {|set|}~%" id)
-    (format stream "rule μ ~a ↪ ~a~%" id id)
-    (format stream "rule π ~a ↪ λ_, true~%" id)))
+    (format stream "constant symbol ~/pvs:pp-sym/: θ {|set|}~%" id)
+    (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
+    (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true~%" id)))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x."
   (print "type-eq-decl")
   (with-slots (id type-expr) decl
-    (format stream "definition ~a: θ {|set|} ≔~_" id)
+    (format stream "definition ~/pvs:pp-sym/: θ {|set|} ≔~_" id)
     (format stream "~i~<~/pvs:pp-dk/~:>~%" `(,type-expr))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s."
   (print "type from")
   (with-slots (id predicate supertype) decl
-    (format stream "definition ~a ≔~_ ~i~<psub {~/pvs:pp-dk/} ~/pvs:pp-dk/~:>~%"
-            id `(,supertype ,predicate)))) ; Type of predicate?
+    (format stream "definition ~/pvs:pp-sym/ ≔~_ " id)
+    (format stream "~i~<psub {~/pvs:pp-dk/} ~/pvs:pp-dk/~:>~%"
+            `(,supertype ,predicate))))
 
 (defmethod pp-dk :around (stream (te type-expr) &optional colon-p at-sign-p)
   (print "type expr")
@@ -56,6 +78,12 @@ in `format' funcall `~/pvs:pp-dk3/'."))
           (call-next-method)
           (dotimes (p parens)
             (format stream ")"))))))
+
+(defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
+  "[bool, bool]"
+  (with-slots (types) te
+    ;; curryfication of tuple types used as function arguments
+    (format stream "~{(~/pvs:pp-dk/)~^ ~~> ~}" types)))
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero}"
@@ -83,8 +111,8 @@ in `format' funcall `~/pvs:pp-dk3/'."))
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
   "Prints name NAME to stream STREAM."
-  (with-slots (id) ex
-    (format stream "~(~a~)" id)))
+  (print "name")
+  (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
   "Prints formula declaration DECL to stream STREAM."
@@ -92,10 +120,10 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
     (cond ((member spelling '(AXIOM POSTULATE))
-           (format stream "symbol ~a: ~_ε ~:<~/pvs:pp-dk/~:>~&"
+           (format stream "symbol ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
                    id `(,definition)))
           ((member spelling '(OBLIGATION LEMMA THEOREM))
-           (format stream "theorem ~a: ~_ε ~:<~/pvs:pp-dk/~:>~&"
+           (format stream "theorem ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
                    id `(,definition))
            (format stream "proof~&")
            ;; TODO: export proof
@@ -112,9 +140,9 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   (if (declared-type bd)
       ;; TODO: add a 'wrap' argument to put parentheses around type only if
       ;; needed
-      (format stream "(~a: η ~:<~/pvs:pp-dk/~:>)"
+      (format stream "(~/pvs:pp-sym/: η ~:<~/pvs:pp-dk/~:>)"
               (id bd) (list (declared-type bd)))
-      (format stream "~a" (id bd))))
+      (format stream "~/pvs:pp-sym/" (id bd))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
@@ -174,4 +202,5 @@ in `format' funcall `~/pvs:pp-dk3/'."))
     (if definition
         (format stream "definition ~/pvs:pp-dk/ ≔~_ ~i~<~/pvs:pp-dk/~:>~%"
                 declared-type `(,definition))
-        (format stream "symbol ~a: η ~:<~/pvs:pp-dk/~:>~%" id `(,type)))))
+        (format stream "symbol ~/pvs:pp-sym/: η ~:<~/pvs:pp-dk/~:>~%"
+                id (list type)))))
