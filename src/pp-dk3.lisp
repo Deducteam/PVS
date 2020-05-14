@@ -57,6 +57,12 @@ in `format' funcall `~/pvs:pp-dk3/'."))
           (dotimes (p parens)
             (format stream ")"))))))
 
+(defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
+  "{n: nat | n /= zero}"
+  (print "subtype")
+  (with-slots (supertype predicate) te
+    (format stream "psub {~/pvs:pp-dk/} (~/pvs:pp-dk/)" supertype predicate)))
+
 ;; exists-type < quant-type < type-expr
 (defmethod pp-dk (stream (te exists-type) &optional colon-p at-sign-p)
   (print "exists type")
@@ -68,11 +74,6 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   (with-slots (type parameters) te
     (format stream "~:<~/pvs:pp-dk/ ~{/pvs:pp-dk/~^ ~}~:>"
             `(,type ,parameters))))
-
-(defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
-  (with-slots (supertype predicate) te
-    ;; TODO: can be factorised with `type-from-decl'
-    (error "not implemented")))
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
