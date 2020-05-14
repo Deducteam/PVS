@@ -1,0 +1,77 @@
+name: export
+
+on:
+  push:
+    branches: [ prettyprint-dedukti ]
+  pull_request:
+    branches: [ prettyprint-dedukti ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: sbcl setup
+      run: |
+        sudo apt install --yes emacs ksh
+        url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
+        (cd ${HOME} || exit 1
+        curl "$url" -L | tar -jx
+        ln -s sbcl* sbcl)
+
+    - name: lambdapi install
+      run: |
+        sudo wget https://github.com/ocaml/opam/releases/download/2.0.5/opam-2.0.5-x86_64-linux -O /usr/bin/opam
+        sudo chmod 755 /usr/bin/opam
+        opam init -a --disable-sandboxing --compiler="4.07.1"
+        opam update
+        opam switch "4.07.1"
+        eval $(opam env)
+        opam install alt-ergo.2.3.0 --yes
+        git clone https://github.com/Deducteam/lambdapi.git lambdapi
+        (cd lambdapi || exit 1
+         opam pin add -n -k path lambdapi .)
+        opam install --deps-only -t -d lambdapi --yes
+        (cd lambdapi || exit 1
+         make install)
+        why3 config --full-config
+
+    - name: personoj install
+      run: |
+        git clone https://github.com/Deducteam/personoj.git personoj
+        (cd personoj || exit 1
+        eval $(opam env)
+        make install)
+
+    - name: compile pvs
+      run: |
+        autoconf
+        ./configure
+        export EMACS="$(command -v emacs)"
+        export SBCLISP_HOME="${HOME}/sbcl"
+        make >output 2>&1
+
+    - name: export
+      run: |
+        ./test-pp-dk.sh
+        ./test-pp-dk.sh -t funs
+        ./test-pp-dk.sh -f lib/prelude -t booleans
+        ./test-pp-dk.sh -f lib/prelude -t boolean_props
+
+    - name: type check
+      run: |
+        eval $(opam env)
+        cd /tmp || exit 1
+        lambdapi init pvs
+        cp *.lp pvs/
+        cd pvs || exit 1
+        rm 'nat.lp' 'main.lp'
+        make
+
+    - name: upload files
+      uses: actions/upload-artifact@v2
+      with:
+        name: lp-exports
+        path: /tmp/pvs/*.lp
