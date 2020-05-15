@@ -15,6 +15,7 @@
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
 necessary."
+  (assert (symbolp sym))
   (flet ((sane-charp (c)
            (cond
              ((alphanumericp c) t)
@@ -33,7 +34,7 @@ necessary."
 in `format' funcall `~/pvs:pp-dk3/'."))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
-  "Prints the name of the module MOD as a comment."
+  "Prints the declarations of module MOD."
   (with-slots (id theory) mod
     (format stream "// Theory ~a~%" id)
     (format stream "~{~/pvs:pp-dk/~^~_~}" theory)))
@@ -42,6 +43,16 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   "Prints importing declaration IMP."
   (with-slots (theory-name) imp
     (format stream "require ~a~%" theory-name)))
+
+(defmethod pp-dk (stream (decl var-decl) &optional colon-p at-sign-p)
+  "n: VAR nat, add the declaration to the context in the form of a binding."
+  (flet ((bd-of-decl (d)
+           "Converts declaration D to a binding declaration."
+           (make-instance 'bind-decl
+                          :type (type d)
+                          :id (id d)
+                          :declared-type (declared-type d))))
+    (setq *ctx-var* (cons (bd-of-decl decl) *ctx-var*))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
@@ -119,16 +130,20 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   (print "formula-decl")
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
-    (cond ((member spelling '(AXIOM POSTULATE))
-           (format stream "symbol ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
-                   id `(,definition)))
-          ((member spelling '(OBLIGATION LEMMA THEOREM))
-           (format stream "theorem ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
-                   id `(,definition))
-           (format stream "proof~&")
-           ;; TODO: export proof
-           (format stream "admit~&"))
-          (t (error "pp-dk-formula-decl: unknown spelling")))))
+    (let* ((defbd (make-instance 'forall-expr
+                                 :bindings *ctx-var*
+                                 :expression definition
+                                 :commas? nil)))
+      (cond ((member spelling '(AXIOM POSTULATE))
+             (format stream "symbol ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
+                     id (list defbd)))
+            ((member spelling '(OBLIGATION LEMMA THEOREM))
+             (format stream "theorem ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
+                     id (list defbd))
+             (format stream "proof~&")
+             ;; TODO: export proof
+             (format stream "admit~&"))
+            (t (error "pp-dk-formula-decl: unknown spelling"))))))
 
 (defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
   (:documentation
