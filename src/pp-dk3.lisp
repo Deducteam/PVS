@@ -6,15 +6,19 @@
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t))
       (format stream "~{~/pvs:pp-reqopen/~&~}"
-              '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins"))
+              '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"))
       (pp-dk stream obj))))
 
 (defparameter *ctx-var* nil
-  "Successive VAR declarations (n: VAR nat).
+  "Successive VAR declarations, *in reverse order* (n: VAR nat).
 Variables declarations are stored as a global variable. All declarations start
 by quantifying on these variables using
 - ∀ if the declaration is of type bool
 - λ if the declaration is of type [η t] (for [t] a term)")
+
+(defparameter *ctx-formals-TYPE* nil
+  "Formal parameters of type `TYPE' of the theory (reversed). Translated to
+prenex quantification on elements.")
 
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
@@ -33,6 +37,12 @@ necessary."
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
 
+(defgeneric process-formal (formal)
+  (:documentation "Process formal theory argument."))
+
+(defmethod process-formal ((form formal-type-decl))
+  (setq *ctx-formals-TYPE* (cons form *ctx-formals-TYPE*)))
+
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
 in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
@@ -40,7 +50,8 @@ arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
   "Prints the declarations of module MOD."
-  (with-slots (id theory) mod
+  (with-slots (id theory formals-sans-usings) mod
+    (mapcar #'process-formal formals-sans-usings)
     (format stream "// Theory ~a~%" id)
     (format stream "~{~/pvs:pp-dk/~^~_~}" theory)))
 
@@ -79,7 +90,7 @@ arguments should be wrapped into parentheses."))
   (print "type from")
   (with-slots (id predicate supertype) decl
     (format stream "definition ~/pvs:pp-sym/ ≔~_ " id)
-    (format stream "~i~<psub {~/pvs:pp-dk/} ~/pvs:pp-dk/~:>~%"
+    (format stream "~i~<psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/~:>~%"
             `(,supertype ,predicate))))
 
 (defmethod pp-dk :around (stream (te type-expr) &optional colon-p at-sign-p)
@@ -111,22 +122,20 @@ arguments should be wrapped into parentheses."))
     (format stream "psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/" supertype predicate)
     (when colon-p (format stream ")"))))
 
-;; exists-type < quant-type < type-expr
-(defmethod pp-dk (stream (te exists-type) &optional colon-p at-sign-p)
-  (print "exists type")
-  (format stream "∃"))
-
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM."
   (print "type app")
   (with-slots (type parameters) te
-    (format stream "~:<~/pvs:pp-dk/ ~{/pvs:pp-dk/~^ ~}~:>"
-            `(,type ,parameters))))
+    (when colon-p (format stream "("))
+    (format stream "~<~/pvs:pp-dk/ ~{/pvs:pp-dk/~^ ~}~:>" `(,type ,parameters))
+    (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
   (with-slots (domain range) te
-    (format stream "~/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)))
+    (when colon-p (format stream "("))
+    (format stream "~:/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)
+    (when colon-p (format stream ")"))))
 ;; TODO: domain dep-binding, possibly a function pp-funtype
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
@@ -144,8 +153,9 @@ arguments should be wrapped into parentheses."))
                                 :commas? nil))
           (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
-      (format stream " ~/pvs:pp-sym/: ~_ε ~:/pvs:pp-dk/~&" id defbd)
-      (when axiomp
+      (format stream " ~/pvs:pp-sym/: ~_~i~<ε ~:/pvs:pp-dk/~:>~&"
+              id (list defbd))
+      (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
         (format stream "admit~%")))))
@@ -186,7 +196,7 @@ arguments should be wrapped into parentheses."))
           ;; print the binding and print the new expression
           (setf (slot-value ex 'bindings) (cdr bindings))
           (when colon-p (format stream "("))
-          (format stream "∃ ~:<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>"
+          (format stream "∃ ~<(λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/)~:>"
                   `(,binding ,ex))
           (when colon-p (format stream ")")))
         (format stream "~/pvs:pp-dk/" expression))))
@@ -199,7 +209,7 @@ arguments should be wrapped into parentheses."))
         (let ((binding (car bindings)))
           (setf (slot-value ex 'bindings) (cdr bindings))
           (when colon-p (format stream "("))
-          (format stream "∀ ~:<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>"
+          (format stream "∀ (~<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>)"
                   `(,binding ,ex))
           (when colon-p (format stream ")")))
         (format stream "~/pvs:pp-dk/" expression))))
@@ -258,5 +268,23 @@ arguments should be wrapped into parentheses."))
     (if definition
         (format stream "definition ~/pvs:pp-dk/ ≔~_ ~i~<~/pvs:pp-dk/~:>~%"
                 declared-type `(,definition))
-        (format stream "symbol ~/pvs:pp-sym/: η ~<~:/pvs:pp-dk/~:>~%"
-                id (list type)))))
+        (progn
+          (format stream "symbol ~/pvs:pp-sym/:~%" id)
+          (if (null *ctx-formals-TYPE*)
+              (format stream "~i~<η ~:/pvs:pp-dk/~:>~&" declared-type)
+              (format stream "~i~<χ ~v:/pvs:pp-prenex-type/~:>~%"
+                      (list *ctx-formals-TYPE* declared-type)))))))
+
+(defun pp-prenex-type (stream obj &optional colon-p at-sign-p types)
+  "Prints object OBJ with prenex polymorphism on types TYPES."
+  (print "pp-prenex-type")
+  (when colon-p (format stream "("))
+  (if (consp types)
+      (let ((tid (id (car types)))
+            (rest (cdr types)))
+        (format stream
+                "∀S (λ~/pvs:pp-sym/: θ {|set|}, ~v:/pvs:pp-prenex-type/)"
+                tid rest obj)
+        )
+      (format stream "scheme ~:/pvs:pp-dk/" obj))
+  (when colon-p (format stream ")")))
