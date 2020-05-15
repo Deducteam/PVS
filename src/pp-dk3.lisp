@@ -35,7 +35,8 @@ necessary."
 
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
-in `format' funcall `~/pvs:pp-dk3/'."))
+in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
+arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
   "Prints the declarations of module MOD."
@@ -205,10 +206,20 @@ in `format' funcall `~/pvs:pp-dk3/'."))
     (format stream "(~/pvs:pp-dk/)~_ (~/pvs:pp-dk/)" operator argument)))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
-  "a /= b, there is also an infix-disequation class"
+  "a /= b, there is also an infix-disequation class."
   (print "disequation")
   (with-slots (operator argument) ex
     (format stream "neq ~/pvs:pp-dk/" argument)))
+
+(defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
+  "a = b, there must be a infix-equation class as well."
+  (print "equation")
+  (with-slots (operator argument) ex
+    ;; argument is a tuple-expr
+    (let* ((args (exprs argument))
+           (argl (car args))
+           (argr (cadr args)))
+      (format stream "(~/pvs:pp-dk/) = (~/pvs:pp-dk/)" argl argr))))
 
 ;; Not documented, subclass of tuple-expr
 (defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)
