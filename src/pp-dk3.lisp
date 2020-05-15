@@ -212,6 +212,18 @@ arguments should be wrapped into parentheses."))
     (format stream "~/pvs:pp-dk/~_ ~/pvs:pp-dk/" operator argument)
     (when colon-p (format stream ")"))))
 
+(defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
+  "IF(a,b,c)"
+  (let* ((args (exprs (argument ex)))
+         (prop (first  args))
+         (then (second args))
+         (else (third  args)))
+    (when colon-p (format stream "("))
+    ;; TODO: handle properly branches
+    (format stream "if ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/) (λ_, ~/pvs:pp-dk/)"
+            prop then else)
+    (when colon-p (format stream ")"))))
+
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "a /= b, there is also an infix-disequation class."
   (print "disequation")
