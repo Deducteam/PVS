@@ -99,13 +99,17 @@ arguments should be wrapped into parentheses."))
   "[bool, bool]"
   (with-slots (types) te
     ;; curryfication of tuple types used as function arguments
-    (format stream "~{(~/pvs:pp-dk/)~^ ~~> ~}" types)))
+    (when colon-p (format stream "("))
+    (format stream "~{~:/pvs:pp-dk/~^ ~~> ~}" types)
+    (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero}"
   (print "subtype")
   (with-slots (supertype predicate) te
-    (format stream "psub {~/pvs:pp-dk/} (~/pvs:pp-dk/)" supertype predicate)))
+    (when colon-p (format stream "("))
+    (format stream "psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/" supertype predicate)
+    (when colon-p (format stream ")"))))
 
 ;; exists-type < quant-type < type-expr
 (defmethod pp-dk (stream (te exists-type) &optional colon-p at-sign-p)
@@ -134,20 +138,17 @@ arguments should be wrapped into parentheses."))
   (print "formula-decl")
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
-    (let* ((defbd (make-instance 'forall-expr
-                                 :bindings *ctx-var*
-                                 :expression definition
-                                 :commas? nil)))
-      (cond ((member spelling '(AXIOM POSTULATE))
-             (format stream "symbol ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
-                     id (list defbd)))
-            ((member spelling '(OBLIGATION LEMMA THEOREM))
-             (format stream "theorem ~/pvs:pp-sym/: ~_ε ~:<~/pvs:pp-dk/~:>~&"
-                     id (list defbd))
-             (format stream "proof~&")
-             ;; TODO: export proof
-             (format stream "admit~&"))
-            (t (error "pp-dk-formula-decl: unknown spelling"))))))
+    (let ((defbd (make-instance 'forall-expr
+                                :bindings *ctx-var*
+                                :expression definition
+                                :commas? nil))
+          (axiomp (member spelling '(AXIOM POSTULATE))))
+      (format stream (if axiomp "symbol" "theorem"))
+      (format stream " ~/pvs:pp-sym/: ~_ε ~:/pvs:pp-dk/~&" id defbd)
+      (when axiomp
+        (format stream "proof~%")
+        ;; TODO: export proof
+        (format stream "admit~%")))))
 
 (defmethod pp-dk :after (stream (decl tcc-decl) &optional colon-p at-sign-p)
   ;; Only add a comment after the formula
@@ -163,7 +164,7 @@ arguments should be wrapped into parentheses."))
   (if (declared-type bd)
       ;; TODO: add a 'wrap' argument to put parentheses around type only if
       ;; needed
-      (format stream "(~/pvs:pp-sym/: η ~:<~/pvs:pp-dk/~:>)"
+      (format stream "~/pvs:pp-sym/: η ~<~:/pvs:pp-dk/~:>"
               (id bd) (list (declared-type bd)))
       (format stream "~/pvs:pp-sym/" (id bd))))
 
@@ -184,8 +185,10 @@ arguments should be wrapped into parentheses."))
           ;; Here we update the `ex' `exists-expr' removing the first binding,
           ;; print the binding and print the new expression
           (setf (slot-value ex 'bindings) (cdr bindings))
+          (when colon-p (format stream "("))
           (format stream "∃ ~:<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>"
-                  `(,binding ,ex)))
+                  `(,binding ,ex))
+          (when colon-p (format stream ")")))
         (format stream "~/pvs:pp-dk/" expression))))
 
 (defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
@@ -195,21 +198,27 @@ arguments should be wrapped into parentheses."))
     (if (consp bindings)
         (let ((binding (car bindings)))
           (setf (slot-value ex 'bindings) (cdr bindings))
+          (when colon-p (format stream "("))
           (format stream "∀ ~:<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>"
-                  `(,binding ,ex)))
+                  `(,binding ,ex))
+          (when colon-p (format stream ")")))
         (format stream "~/pvs:pp-dk/" expression))))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
   (print "application")
   (with-slots (operator argument) ex
-    (format stream "(~/pvs:pp-dk/)~_ (~/pvs:pp-dk/)" operator argument)))
+    (when colon-p (format stream "("))
+    (format stream "~/pvs:pp-dk/~_ ~/pvs:pp-dk/" operator argument)
+    (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "a /= b, there is also an infix-disequation class."
   (print "disequation")
   (with-slots (operator argument) ex
-    (format stream "neq ~/pvs:pp-dk/" argument)))
+    (when colon-p (format stream "("))
+    (format stream "neq ~/pvs:pp-dk/" argument)
+    (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "a = b, there must be a infix-equation class as well."
@@ -219,14 +228,16 @@ arguments should be wrapped into parentheses."))
     (let* ((args (exprs argument))
            (argl (car args))
            (argr (cadr args)))
-      (format stream "(~/pvs:pp-dk/) = (~/pvs:pp-dk/)" argl argr))))
+      (when colon-p (format stream "("))
+      (format stream "~:/pvs:pp-dk/ = ~:/pvs:pp-dk/" argl argr)
+      (when colon-p (format stream ")")))))
 
 ;; Not documented, subclass of tuple-expr
 (defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)
   "(t, u, v)"
   (print "arg-tuple-expr")
   (with-slots (exprs) ex
-    (format stream "~{(~/pvs:pp-dk/)~^ ~_~}" exprs)))
+    (format stream "~{~:/pvs:pp-dk/~^ ~_~}" exprs)))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
@@ -235,5 +246,5 @@ arguments should be wrapped into parentheses."))
     (if definition
         (format stream "definition ~/pvs:pp-dk/ ≔~_ ~i~<~/pvs:pp-dk/~:>~%"
                 declared-type `(,definition))
-        (format stream "symbol ~/pvs:pp-sym/: η ~:<~/pvs:pp-dk/~:>~%"
+        (format stream "symbol ~/pvs:pp-sym/: η ~<~:/pvs:pp-dk/~:>~%"
                 id (list type)))))
