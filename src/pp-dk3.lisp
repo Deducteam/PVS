@@ -10,7 +10,11 @@
       (pp-dk stream obj))))
 
 (defparameter *ctx-var* nil
-  "Successive VAR declarations (n: VAR nat).")
+  "Successive VAR declarations (n: VAR nat).
+Variables declarations are stored as a global variable. All declarations start
+by quantifying on these variables using
+- ∀ if the declaration is of type bool
+- λ if the declaration is of type [η t] (for [t] a term)")
 
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
@@ -126,7 +130,6 @@ in `format' funcall `~/pvs:pp-dk3/'."))
   (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
-  "Prints formula declaration DECL to stream STREAM."
   (print "formula-decl")
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
@@ -144,6 +147,10 @@ in `format' funcall `~/pvs:pp-dk3/'."))
              ;; TODO: export proof
              (format stream "admit~&"))
             (t (error "pp-dk-formula-decl: unknown spelling"))))))
+
+(defmethod pp-dk :after (stream (decl tcc-decl) &optional colon-p at-sign-p)
+  ;; Only add a comment after the formula
+  (format stream "// ^^ Existence TCC~&"))
 
 (defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
   (:documentation
