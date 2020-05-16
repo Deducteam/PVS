@@ -10,7 +10,7 @@
       (pp-dk stream obj))))
 
 (defparameter *ctx-var* nil
-  "Successive VAR declarations, *in reverse order* (n: VAR nat).
+  "Successive VAR declarations, as `bind-decl', *in reverse order* (n: VAR nat).
 Variables declarations are stored as a global variable. All declarations start
 by quantifying on these variables using
 - ∀ if the declaration is of type bool
@@ -149,11 +149,19 @@ arguments should be wrapped into parentheses."))
   (print "formula-decl")
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
-    (let ((defbd (make-instance 'forall-expr
-                                :bindings *ctx-var*
-                                :expression definition
-                                :commas? nil))
-          (axiomp (member spelling '(AXIOM POSTULATE))))
+    (let*
+        ;; Remove from `*ctx-var' variables that are not free in `definition' to
+        ;; avoid creating too many abstractions on top of the definition.
+        ((free-ids (map 'list #'id (freevars definition)))
+         (subctx (remove-if #'(lambda (bd)
+                                (not (member (id bd) free-ids)))
+                            *ctx-var*))
+         ;; Quantify universally on all free variables of `definition'
+         (defbd (make-instance 'forall-expr
+                               :bindings subctx
+                               :expression definition
+                               :commas? nil))
+         (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
       (format stream " ~/pvs:pp-sym/: ~_~i~<ε ~:/pvs:pp-dk/~:>~&"
               id (list defbd))
@@ -184,8 +192,10 @@ arguments should be wrapped into parentheses."))
   "LAMBDA (x: T): t"
   (print "lambda-expr")
   (with-slots (bindings expression) ex
+    (when colon-p (format stream "("))
     (format stream "λ~{~/pvs:pp-binding/~},~_ ~<~/pvs:pp-dk/~:@>"
-            bindings `(,expression))))
+            bindings `(,expression))
+    (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
   (print "exists-expr")
@@ -286,7 +296,6 @@ arguments should be wrapped into parentheses."))
             (rest (cdr types)))
         (format stream
                 "∀S (λ~/pvs:pp-sym/: θ {|set|}, ~v:/pvs:pp-prenex-type/)"
-                tid rest obj)
-        )
+                tid rest obj))
       (format stream "scheme ~:/pvs:pp-dk/" obj))
   (when colon-p (format stream ")")))
