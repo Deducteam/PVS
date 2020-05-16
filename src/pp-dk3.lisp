@@ -108,6 +108,7 @@ arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool]"
+  (print "tupletype")
   (with-slots (types) te
     ;; curryfication of tuple types used as function arguments
     (when colon-p (format stream "("))
@@ -132,6 +133,7 @@ arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
+  (print "funtype")
   (with-slots (domain range) te
     (when colon-p (format stream "("))
     (format stream "~:/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)
@@ -199,7 +201,7 @@ arguments should be wrapped into parentheses."))
           (format stream "∃ ~<(λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/)~:>"
                   `(,binding ,ex))
           (when colon-p (format stream ")")))
-        (format stream "~/pvs:pp-dk/" expression))))
+        (pp-dk stream expression colon-p at-sign-p))))
 
 (defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
   "FORALL (x: T): t"
@@ -212,7 +214,7 @@ arguments should be wrapped into parentheses."))
           (format stream "∀ (~<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>)"
                   `(,binding ,ex))
           (when colon-p (format stream ")")))
-        (format stream "~/pvs:pp-dk/" expression))))
+        (pp-dk stream expression colon-p at-sign-p))))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
