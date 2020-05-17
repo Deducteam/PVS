@@ -282,10 +282,8 @@ arguments should be wrapped into parentheses."))
                 declared-type `(,definition))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
-          (if (null *ctx-formals-TYPE*)
-              (format stream "~i~<η ~:/pvs:pp-dk/~:>~&" declared-type)
-              (format stream "~i~<χ ~v:/pvs:pp-prenex-type/~:>~%"
-                      (list *ctx-formals-TYPE* declared-type)))))))
+          (format stream "  ~i~<χ ~v:/pvs:pp-prenex-type/~:>~%"
+                  (list *ctx-formals-TYPE* declared-type))))))
 
 (defun pp-prenex-type (stream obj &optional colon-p at-sign-p types)
   "Prints object OBJ with prenex polymorphism on types TYPES."
