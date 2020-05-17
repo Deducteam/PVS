@@ -233,7 +233,7 @@ arguments should be wrapped into parentheses."))
   (print "application")
   (with-slots (operator argument) ex
     (when colon-p (format stream "("))
-    (format stream "~/pvs:pp-dk/~_ ~/pvs:pp-dk/" operator argument)
+    (format stream "~/pvs:pp-dk/~_ ~:/pvs:pp-dk/" operator argument)
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
@@ -289,7 +289,7 @@ arguments should be wrapped into parentheses."))
         (progn
           (format stream "definition ~/pvs:pp-sym/ ~{~/pvs:pp-dk-formal/~^ ~} ~_"
                   id formals)
-          (format stream ": ~/pvs:pp-dk/ ≔" declared-type)
+          (format stream ": η ~:/pvs:pp-dk/ ≔" declared-type)
           (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
