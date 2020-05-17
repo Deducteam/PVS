@@ -163,8 +163,8 @@ arguments should be wrapped into parentheses."))
                                :commas? nil))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
-      (format stream " ~/pvs:pp-sym/: ~_~i~<ε ~:/pvs:pp-dk/~:>~&"
-              id (list defbd))
+      (format stream " ~/pvs:pp-sym/: ~_~i~<ε ~v:/pvs:pp-prenex-bool/~:>~&"
+              id (list *ctx-formals-TYPE* defbd))
       (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
@@ -286,14 +286,27 @@ arguments should be wrapped into parentheses."))
                   (list *ctx-formals-TYPE* declared-type))))))
 
 (defun pp-prenex-type (stream obj &optional colon-p at-sign-p types)
-  "Prints object OBJ with prenex polymorphism on types TYPES."
+  "Prints object OBJ of type `TYPE' with prenex polymorphism on types TYPES."
   (print "pp-prenex-type")
   (when colon-p (format stream "("))
   (if (consp types)
       (let ((tid (id (car types)))
             (rest (cdr types)))
         (format stream
-                "∀S (λ~/pvs:pp-sym/: θ {|set|}, ~v:/pvs:pp-prenex-type/)"
+                "∀S (λ~/pvs:pp-sym/: θ {|set|}, ~v/pvs:pp-prenex-type/)"
                 tid rest obj))
       (format stream "scheme ~:/pvs:pp-dk/" obj))
   (when colon-p (format stream ")")))
+
+(defun pp-prenex-bool (stream obj &optional colon-p at-sign-p types)
+  "Prints object OBJ of type `BOOL' with prenex polymorphism on types TYPES."
+  (print "pp-prenex-bool")
+  (if (consp types)
+      (let ((tid (id (car types)))
+            (rest (cdr types)))
+        (when colon-p (format stream "("))
+        (format stream
+                "∀B (λ~/pvs:pp-sym/: θ {|set|}, ~v/pvs:pp-prenex-bool/)"
+                tid rest obj)
+        (when colon-p (format stream ")")))
+      (pp-dk stream obj colon-p at-sign-p)))
