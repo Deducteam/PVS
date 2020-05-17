@@ -11,6 +11,7 @@ BEGIN
 
   n, m: VAR nat
   z_not_succ2: AXIOM succ(n) /= zero
+  plus2(n): nat = succ(succ(n))
 END simple
 
 funs[d: TYPE, r: TYPE]: THEORY
