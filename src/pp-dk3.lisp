@@ -181,12 +181,14 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
   "(x: T)"
   (print "bind-decl")
-  (if (declared-type bd)
-      ;; TODO: add a 'wrap' argument to put parentheses around type only if
-      ;; needed
-      (format stream "~/pvs:pp-sym/: η ~<~:/pvs:pp-dk/~:>"
-              (id bd) (list (declared-type bd)))
-      (format stream "~/pvs:pp-sym/" (id bd))))
+  (format stream "~/pvs:pp-sym/: ~<η ~:/pvs:pp-dk/~:>"
+          (id bd) (list (declared-type bd))))
+
+(defmethod pp-binding (stream (bd untyped-bind-decl) &optional
+                                                       colon-p at-sign-p)
+  (print "untyped-bind-decl")
+  ;; Even though they are untyped, the type is available in `type' slot
+  (pp-sym stream (id bd)))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
@@ -273,13 +275,22 @@ arguments should be wrapped into parentheses."))
   (with-slots (exprs) ex
     (format stream "~{~:/pvs:pp-dk/~^ ~_~}" exprs)))
 
+(defun pp-dk-formal (stream form &optional colon-p at-sign-p)
+  "Prints formals FORM of a declaration."
+  (format stream "~{~/pvs:pp-binding/~^ ~}" form))
+
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
-  (with-slots (id declared-type type definition) decl
+  (with-slots (id declared-type type definition formals) decl
+    ;; It is not clear what `formals' are, type-wise, it's a list of list of
+    ;; bind-decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
-        (format stream "definition ~/pvs:pp-dk/ ≔~_ ~i~<~/pvs:pp-dk/~:>~%"
-                declared-type `(,definition))
+        (progn
+          (format stream "definition ~/pvs:pp-sym/ ~{~/pvs:pp-dk-formal/~^ ~} ~_"
+                  id formals)
+          (format stream ": ~/pvs:pp-dk/ ≔" declared-type)
+          (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
           (format stream "  ~i~<χ ~v:/pvs:pp-prenex-type/~:>~%"
