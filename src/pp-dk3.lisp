@@ -253,16 +253,33 @@ arguments should be wrapped into parentheses."))
 ;; require to unpack arguments
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
-  "a /= b, there is also an infix-disequation class."
+  "/=(A, B)"
   (print "disequation")
+  (when colon-p (format stream "("))
+  (format stream "neq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))
+  (when colon-p (format stream ")")))
+
+(defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
+  "a /= b, there is also an infix-disequation class."
+  (print "infix-disequation")
   (with-slots (operator argument) ex
     (when colon-p (format stream "("))
-    (format stream "neq ~/pvs:pp-dk/" argument)
+    (let* ((args (exprs argument))
+           (argl (car args))
+           (argr (cadr args)))
+      (format stream "~:/pvs:pp-dk/ ≠ ~:/pvs:pp-dk/" argl argr))
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
-  "a = b, there must be a infix-equation class as well."
+  "=(A, B)"
   (print "equation")
+  (when colon-p (format stream "("))
+  (format stream "eq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))
+  (when colon-p (format stream ")")))
+
+(defmethod pp-dk (stream (ex infix-equation) &optional colon-p at-sign-p)
+  "a = b"
+  (print "infix-equation")
   (with-slots (argument) ex
     ;; argument is a tuple-expr
     (let* ((args (exprs argument))
@@ -317,6 +334,26 @@ arguments should be wrapped into parentheses."))
       (when colon-p (format stream "("))
       (format stream "~:/pvs:pp-dk/ ∨ (λ_, ~/pvs:pp-dk/)" argl argr)
       (when colon-p (format stream ")")))))
+
+(defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
+  "IMPLIES(A, B)"
+  (print "implication")
+  (let* ((args (exprs (argument ex)))
+         (argl (car args))
+         (argr (cadr args)))
+    (when colon-p (format stream "("))
+    (format stream "imp ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr)
+    (when colon-p (format stream ")"))))
+
+(defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
+  "A IMPLIES B"
+  (print "infix-implication")
+  (let* ((args (exprs (argument ex)))
+         (argl (car args))
+         (argr (cadr args)))
+    (when colon-p (format stream "("))
+    (format stream "~:/pvs:pp-dk/ ⊃ (λ_, ~/pvs:pp-dk/)" argl argr)
+    (when colon-p (format stream ")"))))
 
 ;; Not documented, subclass of tuple-expr
 (defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)
