@@ -6,7 +6,8 @@
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t))
       (format stream "~{~/pvs:pp-reqopen/~&~}"
-              '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"))
+              '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"
+                "unif_rules"))
       (pp-dk stream obj))))
 
 (defparameter *ctx-var* nil
@@ -248,6 +249,9 @@ arguments should be wrapped into parentheses."))
             prop then else)
     (when colon-p (format stream ")"))))
 
+;; TODO generalise `pp-dk' on prefix operators such that only infix versions
+;; require to unpack arguments
+
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "a /= b, there is also an infix-disequation class."
   (print "disequation")
@@ -259,13 +263,59 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "a = b, there must be a infix-equation class as well."
   (print "equation")
-  (with-slots (operator argument) ex
+  (with-slots (argument) ex
     ;; argument is a tuple-expr
     (let* ((args (exprs argument))
            (argl (car args))
            (argr (cadr args)))
       (when colon-p (format stream "("))
       (format stream "~:/pvs:pp-dk/ = ~:/pvs:pp-dk/" argl argr)
+      (when colon-p (format stream ")")))))
+
+(defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
+  "AND(A, B)"
+  (print "conjunction")
+  (with-slots (argument) ex
+    (let* ((args (exprs argument))
+           (argl (car args))
+           (argr (cadr args)))
+      (when colon-p (format stream "("))
+      (format stream "and ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr)
+      ;; TODO: handle hypothesis
+      (when colon-p (format stream ")")))))
+
+(defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
+  "A AND B"
+  (print "infix-conjunction")
+  (with-slots (argument) ex
+    (let* ((args (exprs argument))
+           (argl (car args))
+           (argr (cadr args)))
+      (when colon-p (format stream "("))
+      (format stream "~:/pvs:pp-dk/ ∧ (λ_, ~/pvs:pp-dk/)" argl argr)
+      (when colon-p (format stream ")")))))
+
+(defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
+  "OR(A, B)"
+  (print "disjunction")
+  (with-slots (argument) ex
+    (let* ((args (exprs argument))
+           (argl (car args))
+           (argr (cadr args)))
+      (when colon-p (format stream "("))
+      (format stream "or ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr)
+      ;; TODO: handle hypothesis
+      (when colon-p (format stream ")")))))
+
+(defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
+  "A OR B"
+  (print "infix-disjunction")
+  (with-slots (argument) ex
+    (let* ((args (exprs argument))
+           (argl (car args))
+           (argr (cadr args)))
+      (when colon-p (format stream "("))
+      (format stream "~:/pvs:pp-dk/ ∨ (λ_, ~/pvs:pp-dk/)" argl argr)
       (when colon-p (format stream ")")))))
 
 ;; Not documented, subclass of tuple-expr
