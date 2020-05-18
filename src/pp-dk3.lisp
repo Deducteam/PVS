@@ -34,6 +34,13 @@ necessary."
         (format stream "~(~a~)" sym)
         (format stream "{|~(~a~)|}" sym))))
 
+(defmacro with-parens ((stream wrap) &body body)
+  "Wraps body BODY into parentheses (printed on stream STREAM) if WRAP is true."
+  `(progn
+     (when ,wrap (format ,stream "("))
+     ,@body
+     (when ,wrap (format ,stream ")"))))
+
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
@@ -252,108 +259,82 @@ arguments should be wrapped into parentheses."))
 ;; TODO generalise `pp-dk' on prefix operators such that only infix versions
 ;; require to unpack arguments
 
+(defmacro with-binapp-args ((larg rarg binapp) &body body)
+  "Binds the left (resp. right) argument of binary application BINAPP to LARG
+(resp.RARG) in body BODY."
+  (let ((args `(exprs (argument ,binapp))))
+    `(let* ((,larg (car ,args))
+            (,rarg (cadr ,args)))
+       ,@body)))
+
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
   (print "disequation")
-  (when colon-p (format stream "("))
-  (format stream "neq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))
-  (when colon-p (format stream ")")))
+  (with-parens (stream colon-p)
+    (format stream "neq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
 
 (defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
   "a /= b, there is also an infix-disequation class."
   (print "infix-disequation")
-  (with-slots (operator argument) ex
-    (when colon-p (format stream "("))
-    (let* ((args (exprs argument))
-           (argl (car args))
-           (argr (cadr args)))
-      (format stream "~:/pvs:pp-dk/ ≠ ~:/pvs:pp-dk/" argl argr))
-    (when colon-p (format stream ")"))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "~:/pvs:pp-dk/ ≠ ~:/pvs:pp-dk/" argl argr))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
   (print "equation")
-  (when colon-p (format stream "("))
-  (format stream "eq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))
-  (when colon-p (format stream ")")))
+  (with-parens (stream colon-p)
+    (format stream "eq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
 
 (defmethod pp-dk (stream (ex infix-equation) &optional colon-p at-sign-p)
   "a = b"
   (print "infix-equation")
-  (with-slots (argument) ex
-    ;; argument is a tuple-expr
-    (let* ((args (exprs argument))
-           (argl (car args))
-           (argr (cadr args)))
-      (when colon-p (format stream "("))
-      (format stream "~:/pvs:pp-dk/ = ~:/pvs:pp-dk/" argl argr)
-      (when colon-p (format stream ")")))))
+  ;; argument is a tuple-expr
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "~:/pvs:pp-dk/ = ~:/pvs:pp-dk/" argl argr))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
   (print "conjunction")
-  (with-slots (argument) ex
-    (let* ((args (exprs argument))
-           (argl (car args))
-           (argr (cadr args)))
-      (when colon-p (format stream "("))
-      (format stream "and ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr)
-      ;; TODO: handle hypothesis
-      (when colon-p (format stream ")")))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "and ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
   "A AND B"
   (print "infix-conjunction")
-  (with-slots (argument) ex
-    (let* ((args (exprs argument))
-           (argl (car args))
-           (argr (cadr args)))
-      (when colon-p (format stream "("))
-      (format stream "~:/pvs:pp-dk/ ∧ (λ_, ~/pvs:pp-dk/)" argl argr)
-      (when colon-p (format stream ")")))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "~:/pvs:pp-dk/ ∧ (λ_, ~/pvs:pp-dk/)" argl argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
   "OR(A, B)"
   (print "disjunction")
-  (with-slots (argument) ex
-    (let* ((args (exprs argument))
-           (argl (car args))
-           (argr (cadr args)))
-      (when colon-p (format stream "("))
-      (format stream "or ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr)
-      ;; TODO: handle hypothesis
-      (when colon-p (format stream ")")))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "or ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
   "A OR B"
   (print "infix-disjunction")
-  (with-slots (argument) ex
-    (let* ((args (exprs argument))
-           (argl (car args))
-           (argr (cadr args)))
-      (when colon-p (format stream "("))
-      (format stream "~:/pvs:pp-dk/ ∨ (λ_, ~/pvs:pp-dk/)" argl argr)
-      (when colon-p (format stream ")")))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "~:/pvs:pp-dk/ ∨ (λ_, ~/pvs:pp-dk/)" argl argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
   (print "implication")
-  (let* ((args (exprs (argument ex)))
-         (argl (car args))
-         (argr (cadr args)))
-    (when colon-p (format stream "("))
-    (format stream "imp ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr)
-    (when colon-p (format stream ")"))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "imp ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
   "A IMPLIES B"
   (print "infix-implication")
-  (let* ((args (exprs (argument ex)))
-         (argl (car args))
-         (argr (cadr args)))
-    (when colon-p (format stream "("))
-    (format stream "~:/pvs:pp-dk/ ⊃ (λ_, ~/pvs:pp-dk/)" argl argr)
-    (when colon-p (format stream ")"))))
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "~:/pvs:pp-dk/ ⊃ (λ_, ~/pvs:pp-dk/)" argl argr))))
 
 ;; Not documented, subclass of tuple-expr
 (defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)
