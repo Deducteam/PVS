@@ -41,6 +41,14 @@ necessary."
      ,@body
      (when ,wrap (format ,stream ")"))))
 
+(defmacro with-binapp-args ((larg rarg binapp) &body body)
+  "Binds the left (resp. right) argument of binary application BINAPP to LARG
+(resp.RARG) in body BODY."
+  (let ((args `(exprs (argument ,binapp))))
+    `(let* ((,larg (car ,args))
+            (,rarg (cadr ,args)))
+       ,@body)))
+
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
@@ -249,6 +257,14 @@ arguments should be wrapped into parentheses."))
     (format stream "~/pvs:pp-dk/~_ ~:/pvs:pp-dk/" operator argument)
     (when colon-p (format stream ")"))))
 
+(defmethod pp-dk (stream (ex infix-application) &optional colon-p at-sign-p)
+  "a OP b"
+  (print "infix-application")
+  (with-parens (stream colon-p)
+    (with-binapp-args (larg rarg ex)
+      (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+              larg (operator ex) rarg))))
+
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
   (let* ((args (exprs (argument ex)))
@@ -263,14 +279,6 @@ arguments should be wrapped into parentheses."))
 
 ;; TODO generalise `pp-dk' on prefix operators such that only infix versions
 ;; require to unpack arguments
-
-(defmacro with-binapp-args ((larg rarg binapp) &body body)
-  "Binds the left (resp. right) argument of binary application BINAPP to LARG
-(resp.RARG) in body BODY."
-  (let ((args `(exprs (argument ,binapp))))
-    `(let* ((,larg (car ,args))
-            (,rarg (cadr ,args)))
-       ,@body)))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
