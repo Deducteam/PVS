@@ -21,6 +21,9 @@ by quantifying on these variables using
   "Formal parameters of type `TYPE' of the theory (reversed). Translated to
 prenex quantification on elements.")
 
+(defparameter *dk-sym-map* '((|boolean| . bool))
+  "Maps PVS names to names of the encoding.")
+
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
 necessary."
@@ -30,9 +33,10 @@ necessary."
              ((alphanumericp c) t)
              ((char= c #\_) t)
              (t nil))))
-    (if (every #'sane-charp (string sym))
-        (format stream "~(~a~)" sym)
-        (format stream "{|~(~a~)|}" sym))))
+    (let ((dk-sym (assoc sym *dk-sym-map*)))
+      (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
+            ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
+            (t (format stream "{|~(~a~)|}" sym))))))
 
 (defmacro with-parens ((stream wrap) &body body)
   "Wraps body BODY into parentheses (printed on stream STREAM) if WRAP is true."

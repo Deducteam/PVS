@@ -57,7 +57,6 @@ jobs:
       run: |
         ./test-pp-dk.sh
         ./test-pp-dk.sh -t funs
-        ./test-pp-dk.sh -f lib/prelude -t booleans
 
     - name: type check
       run: |
