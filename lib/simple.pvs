@@ -18,6 +18,20 @@ funs[d: TYPE, r: TYPE]: THEORY
 BEGIN
   f: [d -> r]
 END funs
+
+complex: THEORY
+BEGIN
+  complex: TYPE+ FROM numfield
+  i: complex
+  i_axm: AXIOM i * i = -1
+  z: VAR complex
+  re(z): real
+  im(z): real
+  cartesian: AXIOM z = re(z) + i * im(z)
+  conjugate(z): complex = re(z) - i * im(z)
+  module(z): posreal = z * conjugate(z)
+END complex
+
 groups[T: TYPE]: THEORY
 BEGIN
   group: TYPE
