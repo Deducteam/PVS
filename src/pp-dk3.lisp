@@ -121,14 +121,14 @@ declaration of TYPE FROM."
   "t: TYPE = x."
   (print "type-eq-decl")
   (with-slots (id type-expr) decl
-    (format stream "definition ~/pvs:pp-sym/: θ {|set|} ≔~_" id)
-    (format stream "~i~<~/pvs:pp-dk/~:>~%" `(,type-expr))))
+    (format stream "definition ~/pvs:pp-sym/: θ {|set|} ≔~%" id)
+    (format stream "  ~i~<~/pvs:pp-dk/~:>~%" `(,type-expr))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
   (print "type from")
   (with-slots (id type-value) decl
-    (format stream "definition ~/pvs:pp-sym/ ≔~_" id)
+    (format stream "definition ~/pvs:pp-sym/ ≔~%" id)
     (format stream "~2:i~/pvs:pp-dk/~&" type-value)))
 
 (defmethod pp-dk :around (stream (te type-expr) &optional colon-p at-sign-p)
