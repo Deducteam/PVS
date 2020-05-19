@@ -429,7 +429,9 @@ declaration of TYPE FROM."
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
   (print "number-expr")
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
-  (format stream "~d" (number ex)))
+  (with-parens (stream colon-p)
+    (with-slots (type number) ex
+      (format stream "cast {_} {~/pvs:pp-dk/} _ ~d _" type number))))
 
 (defmethod pp-dk (stream (decl application-judgement) &optional
                                                         colon-p at-sign-p)
