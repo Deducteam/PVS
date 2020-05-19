@@ -69,7 +69,26 @@ arguments should be wrapped into parentheses."))
   (with-slots (id theory formals-sans-usings) mod
     (mapcar #'process-formal formals-sans-usings)
     (format stream "// Theory ~a~%" id)
-    (format stream "~{~/pvs:pp-dk/~^~_~}" theory)))
+    (pp-decls stream theory)))
+
+(defun pp-decls (stream decls)
+  "Prints declarations DECLS to stream STREAM. We use a special function (rather
+than a `map') because PVS places the declaration of predicates *after* the
+declaration of TYPE FROM."
+  (if (>= (length decls) 2)
+      (let ((decl-1 (first decls))
+            (decl-2 (second decls)))
+        (if (subtypep (type-of decl-1) 'type-from-decl)
+            ;; If the first declaration is a TYPE FROM declaration,
+            ;; print the generated predicate first
+            (progn
+              (format stream "~/pvs:pp-dk/~&" decl-2)
+              (format stream "~/pvs:pp-dk/~&" decl-1)
+              (pp-decls stream (cddr decls)))
+            (progn
+              (format stream "~/pvs:pp-dk/~&" decl-1)
+              (pp-decls stream (cdr decls)))))
+      (format stream "~{~/pvs:pp-dk/~^~&~}" decls)))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
@@ -202,8 +221,8 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
   "(x: T)"
   (print "bind-decl")
-  (format stream "~/pvs:pp-sym/: ~<η ~:/pvs:pp-dk/~:>"
-          (id bd) (list (declared-type bd))))
+  (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
+          (id bd) (declared-type bd)))
 
 (defmethod pp-binding (stream (bd untyped-bind-decl) &optional
                                                        colon-p at-sign-p)
@@ -356,7 +375,7 @@ arguments should be wrapped into parentheses."))
   (with-slots (exprs) ex
     (format stream "~{~:/pvs:pp-dk/~^ ~_~}" exprs)))
 
-(defun pp-dk-formal (stream form &optional colon-p at-sign-p)
+(defun pp-dk-formals (stream form &optional colon-p at-sign-p)
   "Prints formals FORM of a declaration."
   (format stream "~{~/pvs:pp-binding/~^ ~}" form))
 
@@ -368,9 +387,9 @@ arguments should be wrapped into parentheses."))
     (format stream "// Constant declaration ~a~%" id)
     (if definition
         (progn
-          (format stream "definition ~/pvs:pp-sym/ ~{~/pvs:pp-dk-formal/~^ ~} ~_"
-                  id formals)
-          (format stream ": η ~:/pvs:pp-dk/ ≔" declared-type)
+          (format stream "definition ~/pvs:pp-sym/ ~{~/pvs:pp-dk-formals/~^ ~}"
+           id formals)
+          (format stream ": η ~:/pvs:pp-dk/ ≔~&" declared-type)
           (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
