@@ -94,12 +94,11 @@ arguments should be wrapped into parentheses."))
     (format stream "~i~<~/pvs:pp-dk/~:>~%" `(,type-expr))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
-  "t: TYPE FROM s."
+  "t: TYPE FROM s"
   (print "type from")
-  (with-slots (id predicate supertype) decl
-    (format stream "definition ~/pvs:pp-sym/ ≔~_ " id)
-    (format stream "~i~<psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/~:>~%"
-            `(,supertype ,predicate))))
+  (with-slots (id type-value) decl
+    (format stream "definition ~/pvs:pp-sym/ ≔~_" id)
+    (format stream "~2:i~/pvs:pp-dk/~&" type-value)))
 
 (defmethod pp-dk :around (stream (te type-expr) &optional colon-p at-sign-p)
   (print "type expr")
@@ -127,9 +126,9 @@ arguments should be wrapped into parentheses."))
   "{n: nat | n /= zero}"
   (print "subtype")
   (with-slots (supertype predicate) te
-    (when colon-p (format stream "("))
-    (format stream "psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/" supertype predicate)
-    (when colon-p (format stream ")"))))
+    (with-parens (stream colon-p)
+      (format stream "psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/"
+              supertype predicate))))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM."
@@ -171,16 +170,22 @@ arguments should be wrapped into parentheses."))
                                :commas? nil))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
-      (format stream " ~/pvs:pp-sym/: ~_~i~<ε ~v:/pvs:pp-prenex-bool/~:>~&"
-              id (list *ctx-formals-TYPE* defbd))
+      (format stream " ~/pvs:pp-sym/:~%" id)
+      (format stream "  ~iε ~:<~v/pvs:pp-prenex-bool/~:>~&"
+              (list *ctx-formals-TYPE* defbd))
       (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
         (format stream "admit~%")))))
 
-(defmethod pp-dk :after (stream (decl tcc-decl) &optional colon-p at-sign-p)
+(defmethod pp-dk :after
+    (stream (decl existence-tcc) &optional colon-p at-sign-p)
   ;; Only add a comment after the formula
   (format stream "// ^^ Existence TCC~&"))
+
+(defmethod pp-dk :after
+    (stream (decl subtype-tcc) &optional colon-p at-sign-p)
+  (format stream "// ^^ Subtype TCC~&"))
 
 (defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
   (:documentation
@@ -389,3 +394,18 @@ arguments should be wrapped into parentheses."))
                 tid rest obj)
         (when colon-p (format stream ")")))
       (pp-dk stream obj colon-p at-sign-p)))
+
+(defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
+  (print "number-expr")
+  ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
+  (format stream "~d" (number ex)))
+
+(defmethod pp-dk (stream (decl application-judgement) &optional
+                                                        colon-p at-sign-p)
+  (print "application-judgement")
+  (with-slots (id formals declared-type judgement-type) decl
+    (format stream "// Application judgement")
+    (format stream "theorem ~/pvs:pp-sym/:~%" id)
+    (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&" judgement-type)
+    (format stream "proof~%")
+    (format stream "admit~%")))
