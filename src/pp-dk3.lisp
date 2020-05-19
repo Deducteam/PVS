@@ -24,19 +24,25 @@ prenex quantification on elements.")
 (defparameter *dk-sym-map* '((|boolean| . bool))
   "Maps PVS names to names of the encoding.")
 
-(defun pp-sym (stream sym &optional colon-p at-sign-p)
-  "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
-necessary."
-  (assert (symbolp sym))
-  (flet ((sane-charp (c)
-           (cond
-             ((alphanumericp c) t)
-             ((char= c #\_) t)
-             (t nil))))
-    (let ((dk-sym (assoc sym *dk-sym-map*)))
-      (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
-            ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
-            (t (format stream "{|~(~a~)|}" sym))))))
+;;; Utils
+
+(defgeneric currify (te)
+  (:documentation "Currifies an function type, [a,b -> c] --> [a -> [b -> c]]"))
+
+(defmethod currify ((te funtype))
+  (labels ((currify* (ts acc)
+             "Currifies types TS with range ACC."
+             (if (consp ts)
+                 (currify* (cdr ts) (make-instance 'funtype
+                                                   :domain (car ts)
+                                                   :range acc))
+                 ;; Recursive curryfication of `(car ts)' is handled by
+                 ;; pp-dk
+                 acc)))
+    (with-slots (domain range) te
+      (if (subtypep (type-of domain) 'tupletype)
+          (currify* (reverse (types domain)) range)
+          te))))
 
 (defmacro with-parens ((stream wrap) &body body)
   "Wraps body BODY into parentheses (printed on stream STREAM) if WRAP is true."
@@ -52,6 +58,22 @@ necessary."
     `(let* ((,larg (car ,args))
             (,rarg (cadr ,args)))
        ,@body)))
+
+;;; Printing
+
+(defun pp-sym (stream sym &optional colon-p at-sign-p)
+  "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
+necessary."
+  (assert (symbolp sym))
+  (flet ((sane-charp (c)
+           (cond
+             ((alphanumericp c) t)
+             ((char= c #\_) t)
+             (t nil))))
+    (let ((dk-sym (assoc sym *dk-sym-map*)))
+      (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
+            ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
+            (t (format stream "{|~(~a~)|}" sym))))))
 
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
@@ -172,10 +194,11 @@ declaration of TYPE FROM."
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
   (print "funtype")
-  (with-slots (domain range) te
-    (when colon-p (format stream "("))
-    (format stream "~:/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)
-    (when colon-p (format stream ")"))))
+  (let ((cte (currify te)))
+    (with-slots (domain range) cte
+      (when colon-p (format stream "("))
+      (format stream "~:/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)
+      (when colon-p (format stream ")")))))
 ;; TODO: domain dep-binding, possibly a function pp-funtype
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)

@@ -4,6 +4,9 @@ BEGIN
   nat: TYPE = naturals
   zero: nat
   succ: [nat -> nat]
+  plus: [nat, nat -> nat]
+
+  curryfication: [nat, [nat, nat -> nat] -> nat]
 
   z_not_succ: AXIOM FORALL (n: nat): succ(n) /= zero
 
