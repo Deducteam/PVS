@@ -125,10 +125,15 @@ declaration of TYPE FROM."
   "n: VAR nat, add the declaration to the context in the form of a binding."
   (flet ((bd-of-decl (d)
            "Converts declaration D to a binding declaration."
-           (make-instance 'bind-decl
-                          :type (type d)
-                          :id (id d)
-                          :declared-type (declared-type d))))
+           (with-slots (declared-type type id) d
+             (if declared-type
+                 (make-instance 'bind-decl
+                                :type (type d)
+                                :id (id d)
+                                :declared-type (declared-type d))
+                 (make-instance 'untyped-bind-decl
+                                :type (type d)
+                                :id (id d))))))
     (setq *ctx-var* (cons (bd-of-decl decl) *ctx-var*))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
@@ -246,16 +251,13 @@ declaration of TYPE FROM."
    "Prints a typed or untyped binding BINDING to stream STREAM."))
 
 (defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
-  "(x: T)"
+  "(x: T), `untyped-bind-decl' is rather useless since untyped binder can end up
+with the `bind-decl' class."
   (print "bind-decl")
-  (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
-          (id bd) (declared-type bd)))
-
-(defmethod pp-binding (stream (bd untyped-bind-decl) &optional
-                                                       colon-p at-sign-p)
-  (print "untyped-bind-decl")
-  ;; Even though they are untyped, the type is available in `type' slot
-  (pp-sym stream (id bd)))
+  (with-slots (id declared-type) bd
+    (if declared-type
+        (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
+        (pp-sym stream id))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
