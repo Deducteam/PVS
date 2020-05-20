@@ -15,7 +15,13 @@
 Variables declarations are stored as a global variable. All declarations start
 by quantifying on these variables using
 - ∀ if the declaration is of type bool
-- λ if the declaration is of type [η t] (for [t] a term)")
+- λ if the declaration is of type [η t] (for [t] a term).
+`bind-decl' has almost the same slots as `var-decl', so we don't lose much
+information in the transformation. ")
+
+(defun type-with-vars (sym)
+  "Type symbol SYM searching for a binding on symbol SYM in `*ctx-var*'"
+  (declared-type (find sym *ctx-var* :key #'id)))
 
 (defparameter *ctx-formals-TYPE* nil
   "Formal parameters of type `TYPE' of the theory (reversed). Translated to
@@ -39,7 +45,12 @@ prenex quantification on elements.")
 (defmethod pp-formal-as-binding (stream (fo formal-type-decl)
                                  &optional colon-p at-sign-p)
   (print "pp-formal-as-binding")
-  (format stream "(~/pvs:pp-sym/: θ {|set|})" (id fo)))
+  ;; We print the types as implicit arguments, which allows to avoid setting the
+  ;; type as argument on each function call: say function F is defined with type
+  ;; T as formal. Without implicit argument, we’d have to call F T X every time,
+  ;; and get the instance of T from the current context.  Using implicits allows
+  ;; to rely on the typing of other arguments to specify the type of the theory.
+  (format stream "{~/pvs:pp-sym/: θ {|set|}}" (id fo)))
 
 (defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
   (:documentation
@@ -52,11 +63,13 @@ with the `bind-decl' class."
   (with-slots (id declared-type) bd
     (if declared-type
         (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
-        (pp-sym stream id))))
-
-(defun pp-dk-formals (stream form &optional colon-p at-sign-p)
-  "Prints formals FORM of a declaration."
-  (format stream "~{~/pvs:pp-binding/~^ ~}" form))
+        (let ((typ (type-with-vars id)))
+          ;; Try to type the binding using ‘*ctx-var*'
+          (if typ
+              (pp-binding stream
+                          (make-instance 'bind-decl :id id :declared-type typ)
+                          colon-p at-sign-p)
+              (pp-sym stream id))))))
 
 (defgeneric currify (te)
   (:documentation "Currifies an function type, [a,b -> c] --> [a -> [b -> c]]"))
@@ -318,14 +331,6 @@ declaration of TYPE FROM."
     (format stream "~/pvs:pp-dk/~_ ~:/pvs:pp-dk/" operator argument)
     (when colon-p (format stream ")"))))
 
-(defmethod pp-dk (stream (ex infix-application) &optional colon-p at-sign-p)
-  "a OP b"
-  (print "infix-application")
-  (with-parens (stream colon-p)
-    (with-binapp-args (larg rarg ex)
-      (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
-              larg (operator ex) rarg))))
-
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
   (let* ((args (exprs (argument ex)))
@@ -420,15 +425,19 @@ declaration of TYPE FROM."
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
   (with-slots (id declared-type type definition formals) decl
-    ;; It is not clear what `formals' are, type-wise, it's a list of list of
-    ;; bind-decl
     (format stream "// Constant declaration ~a~%" id)
+    (format t "~%Formals: ~a" formals)
     (if definition
         (progn
           (format stream
                   "definition ~/pvs:pp-sym/ ~{~/pvs:pp-formal-as-binding/ ~}"
                   id *ctx-formals-TYPE*)
-          (format stream "~{~/pvs:pp-dk-formals/~^ ~}" formals)
+          ;; It is not clear what `formals' are, type-wise, it's a list of list
+          ;; of bind-decl
+          (map nil #'(lambda (f)
+                       ;; F here is a list of ‘bind-decl'
+                       (format stream "~{~/pvs:pp-binding/~^ ~}" f))
+               formals)
           (format stream ": η ~/pvs:pp-dk/ ≔~&" declared-type)
           ;; Either we print in a “definition” way and type by the return type,
           ;; or we print in a “functional” way (with λ) and we type by the whole
