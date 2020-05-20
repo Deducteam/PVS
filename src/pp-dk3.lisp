@@ -222,9 +222,13 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x."
   (print "type-eq-decl")
-  (with-slots (id type-expr) decl
-    (format stream "definition ~/pvs:pp-sym/: θ {|set|} ≔~%" id)
-    (format stream "  ~i~<~/pvs:pp-dk/~:>~%" `(,type-expr))))
+  (with-slots (id type-expr formals) decl
+    (format stream "definition ~/pvs:pp-sym/ " id)
+    (format stream "~{~/pvs:pp-abstract-thy-formals/ ~}" *thy-formals*)
+    (map nil #'(lambda (fl) (format stream "~{~/pvs:pp-binding/ ~}" fl))
+         formals)
+    (format stream ": θ {|set|} ≔~%")
+    (format stream "  ~i~<~/pvs:pp-dk/~:>~%" (list type-expr))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
@@ -365,7 +369,7 @@ arguments should be wrapped into parentheses."))
   (let ((op (operator* ex))
         (args (argument* ex)))
     ;; Unpack completely the application, de-tuplifying everything
-    (with-parens colon-p
+    (with-parens (stream colon-p)
       (format stream "~/pvs:pp-dk/~_ " op)
       (unless (in-ctx op)
         ;; If the operator is defined in the signature, it abstracts on the
