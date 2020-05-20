@@ -21,10 +21,42 @@ by quantifying on these variables using
   "Formal parameters of type `TYPE' of the theory (reversed). Translated to
 prenex quantification on elements.")
 
-(defparameter *dk-sym-map* '((|boolean| . bool))
+(defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
   "Maps PVS names to names of the encoding.")
 
+(defgeneric process-formal (formal)
+  (:documentation "Process formal theory argument."))
+
+(defmethod process-formal ((form formal-type-decl))
+  "Add theory formal arguments to `*ctx-formals-TYPE*'"
+  (setq *ctx-formals-TYPE* (cons form *ctx-formals-TYPE*)))
+
 ;;; Utils
+
+(defgeneric pp-formal-as-binding (stream formal &optional colon-p at-sign-p)
+  (:documentation "Prints formal FORMAL as a binding (t: TYPE)."))
+
+(defmethod pp-formal-as-binding (stream (fo formal-type-decl)
+                                 &optional colon-p at-sign-p)
+  (print "pp-formal-as-binding")
+  (format stream "(~/pvs:pp-sym/: θ {|set|})" (id fo)))
+
+(defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
+  (:documentation
+   "Prints a typed or untyped binding BINDING to stream STREAM."))
+
+(defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
+  "(x: T), `untyped-bind-decl' is rather useless since untyped binder can end up
+with the `bind-decl' class."
+  (print "bind-decl")
+  (with-slots (id declared-type) bd
+    (if declared-type
+        (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
+        (pp-sym stream id))))
+
+(defun pp-dk-formals (stream form &optional colon-p at-sign-p)
+  "Prints formals FORM of a declaration."
+  (format stream "~{~/pvs:pp-binding/~^ ~}" form))
 
 (defgeneric currify (te)
   (:documentation "Currifies an function type, [a,b -> c] --> [a -> [b -> c]]"))
@@ -78,12 +110,6 @@ necessary."
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
-
-(defgeneric process-formal (formal)
-  (:documentation "Process formal theory argument."))
-
-(defmethod process-formal ((form formal-type-decl))
-  (setq *ctx-formals-TYPE* (cons form *ctx-formals-TYPE*)))
 
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
@@ -246,19 +272,6 @@ declaration of TYPE FROM."
     (stream (decl subtype-tcc) &optional colon-p at-sign-p)
   (format stream "// ^^ Subtype TCC~&"))
 
-(defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
-  (:documentation
-   "Prints a typed or untyped binding BINDING to stream STREAM."))
-
-(defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
-  "(x: T), `untyped-bind-decl' is rather useless since untyped binder can end up
-with the `bind-decl' class."
-  (print "bind-decl")
-  (with-slots (id declared-type) bd
-    (if declared-type
-        (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
-        (pp-sym stream id))))
-
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
   (print "lambda-expr")
@@ -404,10 +417,6 @@ with the `bind-decl' class."
   (with-slots (exprs) ex
     (format stream "~{~:/pvs:pp-dk/~^ ~_~}" exprs)))
 
-(defun pp-dk-formals (stream form &optional colon-p at-sign-p)
-  "Prints formals FORM of a declaration."
-  (format stream "~{~/pvs:pp-binding/~^ ~}" form))
-
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
   (with-slots (id declared-type type definition formals) decl
@@ -416,9 +425,14 @@ with the `bind-decl' class."
     (format stream "// Constant declaration ~a~%" id)
     (if definition
         (progn
-          (format stream "definition ~/pvs:pp-sym/ ~{~/pvs:pp-dk-formals/~^ ~}"
-           id formals)
-          (format stream ": η ~:/pvs:pp-dk/ ≔~&" declared-type)
+          (format stream
+                  "definition ~/pvs:pp-sym/ ~{~/pvs:pp-formal-as-binding/ ~}"
+                  id *ctx-formals-TYPE*)
+          (format stream "~{~/pvs:pp-dk-formals/~^ ~}" formals)
+          (format stream ": η ~/pvs:pp-dk/ ≔~&" declared-type)
+          ;; Either we print in a “definition” way and type by the return type,
+          ;; or we print in a “functional” way (with λ) and we type by the whole
+          ;; type of the expression, using ‘pp-prenex-type’
           (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
