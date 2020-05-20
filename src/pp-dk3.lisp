@@ -1,6 +1,12 @@
 (in-package :pvs)
 (export '(to-dk3))
 
+(defparameter *use-implicits* nil
+  "Set to non-nil to use implicits where it can be.")
+
+(defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
+  "Maps PVS names to names of the encoding.")
+
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (with-open-file (stream file :direction :output :if-exists :supersede)
@@ -9,6 +15,17 @@
               '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"
                 "unif_rules"))
       (pp-dk stream obj))))
+
+;;; Contexts
+
+(defparameter *ctx* nil "Context enriched by bindings.")
+
+(defgeneric in-ctx (obj)
+  (:documentation "Returns `nil' if object OBJ is not defined in `*ctx*' and
+return the definition otherwise."))
+
+(defmethod in-ctx ((name name-expr))
+  (find (id name) *ctx* :key #'id))
 
 (defparameter *ctx-var* nil
   "Successive VAR declarations, as `bind-decl', *in reverse order* (n: VAR nat).
@@ -20,59 +37,21 @@ by quantifying on these variables using
 information in the transformation. ")
 
 (defun type-with-vars (sym)
-  "Type symbol SYM searching for a binding on symbol SYM in `*ctx-var*'"
-  (declared-type (find sym *ctx-var* :key #'id)))
+  "Type symbol SYM searching for a binding on symbol SYM in `*ctx-var*', or
+return `nil' if SYM is not in `*ctx-var*'."
+  (let ((res (find sym *ctx-var* :key #'id)))
+    (when res (declared-type res))))
 
-(defparameter *ctx-formals-TYPE* nil
-  "Formal parameters of type `TYPE' of the theory (reversed). Translated to
-prenex quantification on elements.")
+(defparameter *thy-formals* nil
+  "Formal parameters of the theory (reversed). Translated to prenex
+quantification on elements.")
 
-(defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
-  "Maps PVS names to names of the encoding.")
-
-(defgeneric process-formal (formal)
-  (:documentation "Process formal theory argument."))
-
-(defmethod process-formal ((form formal-type-decl))
-  "Add theory formal arguments to `*ctx-formals-TYPE*'"
-  (setq *ctx-formals-TYPE* (cons form *ctx-formals-TYPE*)))
-
-;;; Utils
-
-(defgeneric pp-formal-as-binding (stream formal &optional colon-p at-sign-p)
-  (:documentation "Prints formal FORMAL as a binding (t: TYPE)."))
-
-(defmethod pp-formal-as-binding (stream (fo formal-type-decl)
-                                 &optional colon-p at-sign-p)
-  (print "pp-formal-as-binding")
-  ;; We print the types as implicit arguments, which allows to avoid setting the
-  ;; type as argument on each function call: say function F is defined with type
-  ;; T as formal. Without implicit argument, we’d have to call F T X every time,
-  ;; and get the instance of T from the current context.  Using implicits allows
-  ;; to rely on the typing of other arguments to specify the type of the theory.
-  (format stream "{~/pvs:pp-sym/: θ {|set|}}" (id fo)))
-
-(defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
-  (:documentation
-   "Prints a typed or untyped binding BINDING to stream STREAM."))
-
-(defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
-  "(x: T), `untyped-bind-decl' is rather useless since untyped binder can end up
-with the `bind-decl' class."
-  (print "bind-decl")
-  (with-slots (id declared-type) bd
-    (if declared-type
-        (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
-        (let ((typ (type-with-vars id)))
-          ;; Try to type the binding using ‘*ctx-var*'
-          (if typ
-              (pp-binding stream
-                          (make-instance 'bind-decl :id id :declared-type typ)
-                          colon-p at-sign-p)
-              (pp-sym stream id))))))
+(defun thy-types ()
+  "Returns the type declarations of `*thy-formals*'."
+  (remove-if #'(lambda (f) (not (formal-type-decl? f))) *thy-formals*))
 
 (defgeneric currify (te)
-  (:documentation "Currifies an function type, [a,b -> c] --> [a -> [b -> c]]"))
+  (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]]"))
 
 (defmethod currify ((te funtype))
   (labels ((currify* (ts acc)
@@ -104,7 +83,61 @@ with the `bind-decl' class."
             (,rarg (cadr ,args)))
        ,@body)))
 
-;;; Printing
+(defun print-debug (ind)
+  "Prints debug information on standard output with IND an indication (typically
+a function name from where the debug is called)."
+  (format t "~%~a:~%" ind)
+  (format t "  for:~i~<~{~a~^,~_ ~}~:>~%" (list *thy-formals*))
+  (format t "  ctx:~i~<~{~a~^,~_ ~}~:>~%" (list *ctx*)))
+
+;;; Specialised printing functions
+
+(defgeneric pp-abstract-thy-formals (stream formals &optional colon-p at-sign-p)
+  (:documentation "Prints the formals to abstract them, if T: TYPE is a formal
+parameter, it prints (T: θ {|set|})."))
+
+(defmethod pp-abstract-thy-formals (stream (decl formal-type-decl)
+                                    &optional colon-p at-sign-p)
+  (if *use-implicits*
+      (format stream "{~/pvs:pp-sym/: θ {|set|}}" (id decl))
+      (format stream "(~/pvs:pp-sym/: θ {|set|})" (id decl))))
+
+(defgeneric pp-applied-thy-formals (stream formals &optional colon-p at-sign-p)
+  (:documentation "Prints the formals as applied arguments, having the `id' they
+are declared with."))
+
+(defmethod pp-applied-thy-formals (stream (decl formal-type-decl)
+                                   &optional colon-p at-sign-p)
+  (unless *use-implicits*
+    (format stream "~/pvs:pp-sym/" (id decl))))
+
+(defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
+  (:documentation
+   "Prints a typed or untyped binding BINDING to stream STREAM. All bindings are
+printed with this function *except* type declaration in theory."))
+
+(defmethod pp-binding :before (stream (bd binding) &optional colon-p at-sign-p)
+  "Add `id' of binding BD to `*ctx*', shadowing previous bindings."
+  (setf *ctx* (cons bd *ctx*)))
+
+(defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
+  "(x: T), `untyped-bind-decl' is rather useless since untyped binder can end up
+with the `bind-decl' class."
+  (print-debug "bind-decl")
+  (with-slots (id declared-type) bd
+    (if declared-type
+        (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
+        (let ((typ (type-with-vars id)))
+          ;; Try to type the binding using ‘*ctx-var*'
+          (if typ
+              (pp-binding stream
+                          (make-instance 'bind-decl :id id :declared-type typ)
+                          colon-p at-sign-p)
+              (pp-sym stream id))))))
+
+(defun pp-reqopen (stream mod &optional colon-p at-sign-p)
+  "Prints a require open module MOD directive on stream STREAM."
+  (format stream "require open personoj.encodings.~a" mod))
 
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
@@ -119,22 +152,6 @@ necessary."
       (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
             ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
             (t (format stream "{|~(~a~)|}" sym))))))
-
-(defun pp-reqopen (stream mod &optional colon-p at-sign-p)
-  "Prints a require open module MOD directive on stream STREAM."
-  (format stream "require open personoj.encodings.~a" mod))
-
-(defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
-  (:documentation "Prints object OBJ to stream STREAM. This function can be used
-in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
-arguments should be wrapped into parentheses."))
-
-(defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
-  "Prints the declarations of module MOD."
-  (with-slots (id theory formals-sans-usings) mod
-    (mapcar #'process-formal formals-sans-usings)
-    (format stream "// Theory ~a~%" id)
-    (pp-decls stream theory)))
 
 (defun pp-decls (stream decls)
   "Prints declarations DECLS to stream STREAM. We use a special function (rather
@@ -155,6 +172,25 @@ declaration of TYPE FROM."
               (pp-decls stream (cdr decls)))))
       (format stream "~{~/pvs:pp-dk/~^~&~}" decls)))
 
+;;; Main printing
+
+(defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
+  (:documentation "Prints object OBJ to stream STREAM. This function can be used
+in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
+arguments should be wrapped into parentheses."))
+
+(defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
+  "Prints the declarations of module MOD."
+  (with-slots (id theory formals-sans-usings) mod
+    ;; Add the formals to ‘*thy-formals*’
+    (setf *thy-formals* (concatenate 'list *thy-formals* formals-sans-usings))
+    (format stream "// Theory ~a~%" id)
+    (pp-decls stream theory)))
+
+(defmethod pp-dk :before (stream (decl declaration) &optional colon-p at-sign-p)
+  "Called before each declaration, resets the `*ctx*' to `*thy-formals'."
+  (setf *ctx* *thy-formals*))
+
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
   (with-slots (theory-name) imp
@@ -173,7 +209,7 @@ declaration of TYPE FROM."
                  (make-instance 'untyped-bind-decl
                                 :type (type d)
                                 :id (id d))))))
-    (setq *ctx-var* (cons (bd-of-decl decl) *ctx-var*))))
+    (setf *ctx-var* (cons (bd-of-decl decl) *ctx-var*))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
@@ -247,7 +283,7 @@ declaration of TYPE FROM."
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
   "Prints name NAME to stream STREAM."
-  (print "name")
+  (print-debug "name")
   (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -270,7 +306,7 @@ declaration of TYPE FROM."
       (format stream (if axiomp "symbol" "theorem"))
       (format stream " ~/pvs:pp-sym/:~%" id)
       (format stream "  ~iε ~:<~v/pvs:pp-prenex-bool/~:>~&"
-              (list *ctx-formals-TYPE* defbd))
+              (list (thy-types) defbd))
       (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
@@ -325,11 +361,17 @@ declaration of TYPE FROM."
 
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
-  (print "application")
-  (with-slots (operator argument) ex
-    (when colon-p (format stream "("))
-    (format stream "~/pvs:pp-dk/~_ ~:/pvs:pp-dk/" operator argument)
-    (when colon-p (format stream ")"))))
+  (print-debug "application")
+  (let ((op (operator* ex))
+        (args (argument* ex)))
+    ;; Unpack completely the application, de-tuplifying everything
+    (with-parens colon-p
+      (format stream "~/pvs:pp-dk/~_ " op)
+      (unless (in-ctx op)
+        ;; If the operator is defined in the signature, it abstracts on the
+        ;; arguments of the theory, so we need to apply them
+        (format stream "~{~:/pvs:pp-applied-thy-formals/ ~}~_" *thy-formals*))
+      (format stream "~{~:/pvs:pp-dk/~^ ~}" args))))
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
@@ -430,8 +472,8 @@ declaration of TYPE FROM."
     (if definition
         (progn
           (format stream
-                  "definition ~/pvs:pp-sym/ ~{~/pvs:pp-formal-as-binding/ ~}"
-                  id *ctx-formals-TYPE*)
+                  "definition ~/pvs:pp-sym/ ~{~/pvs:pp-abstract-thy-formals/ ~}"
+                  id (thy-types))
           ;; It is not clear what `formals' are, type-wise, it's a list of list
           ;; of bind-decl
           (map nil #'(lambda (f)
@@ -446,7 +488,7 @@ declaration of TYPE FROM."
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
           (format stream "  ~i~<χ ~v:/pvs:pp-prenex-type/~:>~%"
-                  (list *ctx-formals-TYPE* declared-type))))))
+                  (list (thy-types) declared-type))))))
 
 (defun pp-prenex-type (stream obj &optional colon-p at-sign-p types)
   "Prints object OBJ of type `TYPE' with prenex polymorphism on types TYPES."
