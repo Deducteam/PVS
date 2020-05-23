@@ -36,10 +36,10 @@ untyped variable, its type is sought among the declared variables.
 `bind-decl' has almost the same slots as `var-decl', so we don't lose much
 information in the transformation. ")
 
-(defun type-with-vars (sym)
-  "Type symbol SYM searching for a binding on symbol SYM in `*ctx-var*', or
-return `nil' if SYM is not in `*ctx-var*'."
-  (let ((res (find sym *ctx-var* :key #'id)))
+(defun type-with (ctx sym)
+  "Type symbol SYM searching in context CTX. CTX can contain anything that has a
+`declared-type' attribute."
+  (let ((res (find sym ctx :key #'id)))
     (when res (declared-type res))))
 
 (defgeneric currify (te)
@@ -108,8 +108,7 @@ with the `bind-decl' class."
   (with-slots (id declared-type) bd
     (if declared-type
         (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
-        (let ((typ (type-with-vars id)))
-          ;; Try to type the binding using ‘*ctx-var*'
+        (let ((typ (type-with *ctx-var* id)))
           (if typ
               (pp-binding stream
                           (make-instance 'bind-decl :id id :declared-type typ)
