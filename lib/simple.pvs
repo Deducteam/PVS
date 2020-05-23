@@ -1,41 +1,36 @@
 simple: THEORY
 BEGIN
+  % Basic
   naturals: TYPE
   nat: TYPE = naturals
   zero: nat
   succ: [nat -> nat]
   plus: [nat, nat -> nat]
 
+  subt: TYPE FROM nat
+
   curryfication: [nat, [nat, nat -> nat] -> nat]
 
+  % Constant declaration
+  one: nat = succ(zero)
+
+  % Proposition
   z_not_succ: AXIOM FORALL (n: nat): succ(n) /= zero
 
+  % Predicate sub-type
   nznat: TYPE = { n: nat | n /= zero }
+  rat: TYPE
+  zrat: rat
+  frac: [nat, nznat -> rat]
 
+  % Quantification
   n, m: VAR nat
-  z_not_succ2: AXIOM succ(n) /= zero
-  plus2(n): nat = succ(succ(n))
+  z_not_succ2: AXIOM succ(n) /= zero % In propositions
+  plus2(n): nat = succ(succ(n))      % In defined values
+  nat_builder(n): nat                % In undefined values
+
+  % Logical context
+  lc_impl: LEMMA n /= zero IMPLIES n /= zero
+  lc_or: LEMMA n = zero OR n /= zero
+  lc_if(n): rat = IF n = zero THEN zrat ELSE frac(one, n) ENDIF
 END simple
-
-funs[d: TYPE, r: TYPE]: THEORY
-BEGIN
-  f: [d -> r]
-END funs
-
-complex: THEORY
-BEGIN
-  complex: TYPE+ FROM numfield
-  i: complex
-  i_axm: AXIOM i * i = -1
-  z: VAR complex
-  re(z): real
-  im(z): real
-  cartesian: AXIOM z = re(z) + i * im(z)
-  conjugate(z): complex = re(z) - i * im(z)
-  module(z): posreal = z * conjugate(z)
-END complex
-
-groups[T: TYPE]: THEORY
-BEGIN
-  group: TYPE
-END groups

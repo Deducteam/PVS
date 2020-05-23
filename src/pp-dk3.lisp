@@ -42,14 +42,6 @@ return `nil' if SYM is not in `*ctx-var*'."
   (let ((res (find sym *ctx-var* :key #'id)))
     (when res (declared-type res))))
 
-(defparameter *thy-formals* nil
-  "Formal parameters of the theory (reversed). Translated to prenex
-quantification on elements.")
-
-(defun thy-types ()
-  "Returns the type declarations of `*thy-formals*'."
-  (remove-if #'(lambda (f) (not (formal-type-decl? f))) *thy-formals*))
-
 (defgeneric currify (te)
   (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]]"))
 
@@ -96,29 +88,9 @@ quantification on elements.")
   "Prints debug information on standard output with IND an indication (typically
 a function name from where the debug is called)."
   (format t "~%~a:~%" ind)
-  (format t "  for:~i~<~{~a~^,~_ ~}~:>~%" (list *thy-formals*))
   (format t "  ctx:~i~<~{~a~^,~_ ~}~:>~%" (list *ctx*)))
 
 ;;; Specialised printing functions
-
-(defgeneric pp-abstract-thy-formals (stream formals &optional colon-p at-sign-p)
-  (:documentation "Prints the formals to abstract them, if T: TYPE is a formal
-parameter, it prints (T: θ {|set|})."))
-
-(defmethod pp-abstract-thy-formals (stream (decl formal-type-decl)
-                                    &optional colon-p at-sign-p)
-  (if *use-implicits*
-      (format stream "{~/pvs:pp-sym/: θ {|set|}}" (id decl))
-      (format stream "(~/pvs:pp-sym/: θ {|set|})" (id decl))))
-
-(defgeneric pp-applied-thy-formals (stream formals &optional colon-p at-sign-p)
-  (:documentation "Prints the formals as applied arguments, having the `id' they
-are declared with."))
-
-(defmethod pp-applied-thy-formals (stream (decl formal-type-decl)
-                                   &optional colon-p at-sign-p)
-  (unless *use-implicits*
-    (format stream "~/pvs:pp-sym/" (id decl))))
 
 (defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
   (:documentation
@@ -191,15 +163,13 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
   "Prints the declarations of module MOD."
   (with-slots (id theory formals-sans-usings) mod
-    ;; Add the formals to ‘*thy-formals*’
-    (setf *thy-formals* (concatenate 'list *thy-formals* formals-sans-usings))
     (format stream "// Theory ~a~%" id)
     (pp-decls stream theory)))
 
 (defmethod pp-dk :before (stream (decl declaration)
                           &optional _colon-p _at-sign-p)
-  (setf *var-count* 0)
-  (setf *ctx* *thy-formals*))
+  (setf *ctx* nil)
+  (setf *var-count* 0))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
@@ -234,7 +204,6 @@ arguments should be wrapped into parentheses."))
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (format stream "definition ~/pvs:pp-sym/ " id)
-    (format stream "~{~/pvs:pp-abstract-thy-formals/ ~}" *thy-formals*)
     (map nil #'(lambda (fl) (format stream "~{~/pvs:pp-binding/ ~}" fl))
          formals)
     (format stream ": θ {|set|} ≔~%")
@@ -306,8 +275,8 @@ arguments should be wrapped into parentheses."))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
       (format stream " ~/pvs:pp-sym/:~%" id)
-      (format stream "  ~iε ~:<~v/pvs:pp-prenex-bool/~:>~&"
-              (list (thy-types) defbd))
+      (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&"
+              (list defbd))
       (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
@@ -369,10 +338,6 @@ arguments should be wrapped into parentheses."))
        (args (arguments ex)))
     (with-parens (stream colon-p)
       (format stream "~/pvs:pp-dk/~_ " op)
-      (unless (in-ctxp op)
-        ;; If the operator is defined in the signature, it abstracts on the
-        ;; arguments of the theory, so we need to apply them
-        (format stream "~{~:/pvs:pp-applied-thy-formals/ ~}~_" *thy-formals*))
       (format stream "~{(cast _ ~:/pvs:pp-dk/ _)~^ ~}" args))))
 
 ;; TODO in all logical connectors, the generated variables should be added to a
@@ -479,9 +444,7 @@ arguments should be wrapped into parentheses."))
     (format t "~%Formals: ~a" formals)
     (if definition
         (progn
-          (format stream
-                  "definition ~/pvs:pp-sym/ ~{~/pvs:pp-abstract-thy-formals/ ~}"
-                  id (thy-types))
+          (format stream "definition ~/pvs:pp-sym/~_ " id)
           ;; It is not clear what `formals' are, type-wise, it's a list of list
           ;; of bind-decl
           (map nil #'(lambda (f)
@@ -495,34 +458,8 @@ arguments should be wrapped into parentheses."))
           (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
-          (format stream "  ~i~<χ ~v:/pvs:pp-prenex-type/~:>~%"
-                  (list (thy-types) declared-type))))))
-
-(defun pp-prenex-type (stream obj &optional colon-p at-sign-p types)
-  "Prints object OBJ of type `TYPE' with prenex polymorphism on types TYPES."
-  (print "pp-prenex-type")
-  (when colon-p (format stream "("))
-  (if (consp types)
-      (let ((tid (id (car types)))
-            (rest (cdr types)))
-        (format stream
-                "∀S (λ~/pvs:pp-sym/: θ {|set|}, ~v/pvs:pp-prenex-type/)"
-                tid rest obj))
-      (format stream "scheme ~:/pvs:pp-dk/" obj))
-  (when colon-p (format stream ")")))
-
-(defun pp-prenex-bool (stream obj &optional colon-p at-sign-p types)
-  "Prints object OBJ of type `BOOL' with prenex polymorphism on types TYPES."
-  (print "pp-prenex-bool")
-  (if (consp types)
-      (let ((tid (id (car types)))
-            (rest (cdr types)))
-        (when colon-p (format stream "("))
-        (format stream
-                "∀B (λ~/pvs:pp-sym/: θ {|set|}, ~v/pvs:pp-prenex-bool/)"
-                tid rest obj)
-        (when colon-p (format stream ")")))
-      (pp-dk stream obj colon-p at-sign-p)))
+          (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
+                  (list declared-type))))))
 
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
   (print "number-expr")
