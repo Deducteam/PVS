@@ -20,19 +20,18 @@
 
 (defparameter *ctx* nil "Context enriched by bindings.")
 
-(defgeneric in-ctx (obj)
+(defgeneric in-ctxp (obj)
   (:documentation "Returns `nil' if object OBJ is not defined in `*ctx*' and
 return the definition otherwise."))
 
-(defmethod in-ctx ((name name-expr))
+(defmethod in-ctxp ((name name-expr))
   (find (id name) *ctx* :key #'id))
 
 (defparameter *ctx-var* nil
-  "Successive VAR declarations, as `bind-decl', *in reverse order* (n: VAR nat).
-Variables declarations are stored as a global variable. All declarations start
-by quantifying on these variables using
-- ∀ if the declaration is of type bool
-- λ if the declaration is of type [η t] (for [t] a term).
+  "Successive VAR declarations, as `bind-decl', (n: VAR nat).
+They can be used in formula declaration as-is, without explicit quantification,
+such as in AXIOM succ(n) /= zero. If a constant declaration quantifies on an
+untyped variable, its type is sought among the declared variables.
 `bind-decl' has almost the same slots as `var-decl', so we don't lose much
 information in the transformation. ")
 
@@ -67,6 +66,15 @@ quantification on elements.")
       (if (subtypep (type-of domain) 'tupletype)
           (currify* (reverse (types domain)) range)
           te))))
+
+(defparameter *var-count* 0
+  "Number of generated variables. Used to create fresh variable names.")
+
+(defun fresh-var ()
+  "Provide a fresh variable name."
+  (let ((var-name (format nil "pvs~d" *var-count*)))
+    (incf *var-count*)
+    var-name))
 
 (defmacro with-parens ((stream wrap) &body body)
   "Wraps body BODY into parentheses (printed on stream STREAM) if WRAP is true."
@@ -187,8 +195,9 @@ arguments should be wrapped into parentheses."))
     (format stream "// Theory ~a~%" id)
     (pp-decls stream theory)))
 
-(defmethod pp-dk :before (stream (decl declaration) &optional colon-p at-sign-p)
-  "Called before each declaration, resets the `*ctx*' to `*thy-formals'."
+(defmethod pp-dk :before (stream (decl declaration)
+                          &optional _colon-p _at-sign-p)
+  (setf *var-count* 0)
   (setf *ctx* *thy-formals*))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
@@ -209,7 +218,7 @@ arguments should be wrapped into parentheses."))
                  (make-instance 'untyped-bind-decl
                                 :type (type d)
                                 :id (id d))))))
-    (setf *ctx-var* (cons (bd-of-decl decl) *ctx-var*))))
+    (setf *ctx-var* (concatenate 'list *ctx-var* (list (bd-of-decl decl))))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
@@ -371,11 +380,14 @@ arguments should be wrapped into parentheses."))
     ;; Unpack completely the application, de-tuplifying everything
     (with-parens (stream colon-p)
       (format stream "~/pvs:pp-dk/~_ " op)
-      (unless (in-ctx op)
+      (unless (in-ctxp op)
         ;; If the operator is defined in the signature, it abstracts on the
         ;; arguments of the theory, so we need to apply them
         (format stream "~{~:/pvs:pp-applied-thy-formals/ ~}~_" *thy-formals*))
       (format stream "~{~:/pvs:pp-dk/~^ ~}" args))))
+
+;; TODO in all logical connectors, the generated variables should be added to a
+;; context to be available to type expressions.
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
@@ -385,12 +397,9 @@ arguments should be wrapped into parentheses."))
          (else (third  args)))
     (when colon-p (format stream "("))
     ;; TODO: handle properly branches
-    (format stream "if ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/) (λ_, ~/pvs:pp-dk/)"
-            prop then else)
+    (format stream "if ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/) (λ~a, ~/pvs:pp-dk/)"
+            prop (fresh-var) then (fresh-var) else)
     (when colon-p (format stream ")"))))
-
-;; TODO generalise `pp-dk' on prefix operators such that only infix versions
-;; require to unpack arguments
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
@@ -399,7 +408,7 @@ arguments should be wrapped into parentheses."))
     (format stream "neq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
 
 (defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
-  "a /= b, there is also an infix-disequation class."
+  "a /= b"
   (print "infix-disequation")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
@@ -424,42 +433,48 @@ arguments should be wrapped into parentheses."))
   (print "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "and ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr))))
+      (format stream "and ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
   "A AND B"
   (print "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∧ (λ_, ~/pvs:pp-dk/)" argl argr))))
+      (format stream "~:/pvs:pp-dk/ ∧ (λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
   "OR(A, B)"
   (print "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "or ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr))))
+      (format stream "or ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
   "A OR B"
   (print "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∨ (λ_, ~/pvs:pp-dk/)" argl argr))))
+      (format stream "~:/pvs:pp-dk/ ∨ (λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
   (print "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "imp ~:/pvs:pp-dk/ (λ_, ~/pvs:pp-dk/)" argl argr))))
+      (format stream "imp ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
   "A IMPLIES B"
   (print "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ⊃ (λ_, ~/pvs:pp-dk/)" argl argr))))
+      (format stream "~:/pvs:pp-dk/ ⊃ (λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 ;; Not documented, subclass of tuple-expr
 (defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)
