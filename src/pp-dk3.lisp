@@ -176,6 +176,8 @@ arguments should be wrapped into parentheses."))
   (with-slots (theory-name) imp
     (format stream "require ~a~%" theory-name)))
 
+;;; Declarations
+
 (defmethod pp-dk (stream (decl var-decl) &optional colon-p at-sign-p)
   "n: VAR nat, add the declaration to the context in the form of a binding."
   (flet ((bd-of-decl (d)
@@ -216,6 +218,77 @@ arguments should be wrapped into parentheses."))
     (format stream "definition ~/pvs:pp-sym/ ≔~%" id)
     (format stream "  ~i~/pvs:pp-dk/~&" type-value)))
 
+(defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
+  (print "formula-decl")
+  (with-slots (spelling id definition) decl
+    (format stream "// Formula declaration: ~a~&" spelling)
+    (let*
+        ;; Remove from `*ctx-var' variables that are not free in `definition' to
+        ;; avoid creating too many abstractions on top of the definition.
+        ((free-ids (map 'list #'id (freevars definition)))
+         (subctx (remove-if #'(lambda (bd)
+                                (not (member (id bd) free-ids)))
+                            *ctx-var*))
+         ;; Quantify universally on all free variables of `definition'
+         (defbd (make-instance 'forall-expr
+                               :bindings subctx
+                               :expression definition
+                               :commas? nil))
+         (axiomp (member spelling '(AXIOM POSTULATE))))
+      (format stream (if axiomp "symbol" "theorem"))
+      (format stream " ~/pvs:pp-sym/:~%" id)
+      (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&"
+              (list defbd))
+      (unless axiomp
+        (format stream "proof~%")
+        ;; TODO: export proof
+        (format stream "admit~%")))))
+
+(defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
+  (print "const-decl")
+  (with-slots (id declared-type type definition formals) decl
+    (format stream "// Constant declaration ~a~%" id)
+    (format t "~%Formals: ~a" formals)
+    (if definition
+        (progn
+          (format stream "definition ~/pvs:pp-sym/~_ " id)
+          ;; It is not clear what `formals' are, type-wise, it's a list of list
+          ;; of bind-decl
+          (map nil #'(lambda (f)
+                       ;; F here is a list of ‘bind-decl'
+                       (format stream "~{~/pvs:pp-binding/~^ ~}" f))
+               formals)
+          (format stream ": η ~/pvs:pp-dk/ ≔~&" declared-type)
+          ;; Either we print in a “definition” way and type by the return type,
+          ;; or we print in a “functional” way (with λ) and we type by the whole
+          ;; type of the expression, using ‘pp-prenex-type’
+          (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
+        (progn
+          (format stream "symbol ~/pvs:pp-sym/:~%" id)
+          (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
+                  (list declared-type))))))
+
+(defmethod pp-dk (stream (decl application-judgement) &optional
+                                                        colon-p at-sign-p)
+  (print "application-judgement")
+  (with-slots (id formals declared-type judgement-type) decl
+    (format stream "// Application judgement")
+    (format stream "theorem ~/pvs:pp-sym/:~%" id)
+    (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&" judgement-type)
+    (format stream "proof~%")
+    (format stream "admit~%")))
+
+(defmethod pp-dk :after
+    (stream (decl existence-tcc) &optional colon-p at-sign-p)
+  ;; Only add a comment after the formula
+  (format stream "// ^^ Existence TCC~&"))
+
+(defmethod pp-dk :after
+    (stream (decl subtype-tcc) &optional colon-p at-sign-p)
+  (format stream "// ^^ Subtype TCC~&"))
+
+;;; Type expressions
+
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool]"
   (print "tupletype")
@@ -251,45 +324,7 @@ arguments should be wrapped into parentheses."))
       (when colon-p (format stream ")")))))
 ;; TODO: domain dep-binding, possibly a function pp-funtype
 
-(defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
-  "Prints name NAME to stream STREAM."
-  (print-debug "name")
-  (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
-
-(defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
-  (print "formula-decl")
-  (with-slots (spelling id definition) decl
-    (format stream "// Formula declaration: ~a~&" spelling)
-    (let*
-        ;; Remove from `*ctx-var' variables that are not free in `definition' to
-        ;; avoid creating too many abstractions on top of the definition.
-        ((free-ids (map 'list #'id (freevars definition)))
-         (subctx (remove-if #'(lambda (bd)
-                                (not (member (id bd) free-ids)))
-                            *ctx-var*))
-         ;; Quantify universally on all free variables of `definition'
-         (defbd (make-instance 'forall-expr
-                               :bindings subctx
-                               :expression definition
-                               :commas? nil))
-         (axiomp (member spelling '(AXIOM POSTULATE))))
-      (format stream (if axiomp "symbol" "theorem"))
-      (format stream " ~/pvs:pp-sym/:~%" id)
-      (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&"
-              (list defbd))
-      (unless axiomp
-        (format stream "proof~%")
-        ;; TODO: export proof
-        (format stream "admit~%")))))
-
-(defmethod pp-dk :after
-    (stream (decl existence-tcc) &optional colon-p at-sign-p)
-  ;; Only add a comment after the formula
-  (format stream "// ^^ Existence TCC~&"))
-
-(defmethod pp-dk :after
-    (stream (decl subtype-tcc) &optional colon-p at-sign-p)
-  (format stream "// ^^ Subtype TCC~&"))
+;;; Expressions
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
@@ -328,6 +363,11 @@ arguments should be wrapped into parentheses."))
                   `(,binding ,ex))
           (when colon-p (format stream ")")))
         (pp-dk stream expression colon-p at-sign-p))))
+
+(defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
+  "Prints name NAME to stream STREAM."
+  (print-debug "name")
+  (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
@@ -437,43 +477,9 @@ arguments should be wrapped into parentheses."))
   (with-slots (exprs) ex
     (format stream "~{~:/pvs:pp-dk/~^ ~_~}" exprs)))
 
-(defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
-  (print "const-decl")
-  (with-slots (id declared-type type definition formals) decl
-    (format stream "// Constant declaration ~a~%" id)
-    (format t "~%Formals: ~a" formals)
-    (if definition
-        (progn
-          (format stream "definition ~/pvs:pp-sym/~_ " id)
-          ;; It is not clear what `formals' are, type-wise, it's a list of list
-          ;; of bind-decl
-          (map nil #'(lambda (f)
-                       ;; F here is a list of ‘bind-decl'
-                       (format stream "~{~/pvs:pp-binding/~^ ~}" f))
-               formals)
-          (format stream ": η ~/pvs:pp-dk/ ≔~&" declared-type)
-          ;; Either we print in a “definition” way and type by the return type,
-          ;; or we print in a “functional” way (with λ) and we type by the whole
-          ;; type of the expression, using ‘pp-prenex-type’
-          (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
-        (progn
-          (format stream "symbol ~/pvs:pp-sym/:~%" id)
-          (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
-                  (list declared-type))))))
-
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
   (print "number-expr")
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
   (with-parens (stream colon-p)
     (with-slots (type number) ex
       (format stream "cast {_} {~/pvs:pp-dk/} _ ~d _" type number))))
-
-(defmethod pp-dk (stream (decl application-judgement) &optional
-                                                        colon-p at-sign-p)
-  (print "application-judgement")
-  (with-slots (id formals declared-type judgement-type) decl
-    (format stream "// Application judgement")
-    (format stream "theorem ~/pvs:pp-sym/:~%" id)
-    (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&" judgement-type)
-    (format stream "proof~%")
-    (format stream "admit~%")))
