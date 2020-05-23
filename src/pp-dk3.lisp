@@ -244,20 +244,7 @@ arguments should be wrapped into parentheses."))
   (print "type from")
   (with-slots (id type-value) decl
     (format stream "definition ~/pvs:pp-sym/ ≔~%" id)
-    (format stream "~2:i~/pvs:pp-dk/~&" type-value)))
-
-(defmethod pp-dk :around (stream (te type-expr) &optional colon-p at-sign-p)
-  (print "type expr")
-  (with-slots (parens print-type free-variables free-parameters) te
-    (if print-type
-        (call-next-method)
-        ;; (format stream "~/pvs:pp-dk/" print-type)
-        (progn
-          (dotimes (p parens)
-            (format stream "("))
-          (call-next-method)
-          (dotimes (p parens)
-            (format stream ")"))))))
+    (format stream "  ~i~/pvs:pp-dk/~&" type-value)))
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool]"
