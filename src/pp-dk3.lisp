@@ -18,7 +18,8 @@
 
 ;;; Contexts
 
-(defparameter *ctx* nil "Context enriched by bindings.")
+(defparameter *ctx* nil
+  "Context enriched by bindings. Most recent binding on top.")
 
 (defgeneric in-ctxp (obj)
   (:documentation "Returns `nil' if object OBJ is not defined in `*ctx*' and
@@ -362,16 +363,17 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
   (print-debug "application")
-  (let ((op (operator* ex))
-        (args (argument* ex)))
-    ;; Unpack completely the application, de-tuplifying everything
+  (let
+      ;; Unpack completely the application, de-tuplifying everything
+      ((op (operator* ex))
+       (args (arguments ex)))
     (with-parens (stream colon-p)
       (format stream "~/pvs:pp-dk/~_ " op)
       (unless (in-ctxp op)
         ;; If the operator is defined in the signature, it abstracts on the
         ;; arguments of the theory, so we need to apply them
         (format stream "~{~:/pvs:pp-applied-thy-formals/ ~}~_" *thy-formals*))
-      (format stream "~{~:/pvs:pp-dk/~^ ~}" args))))
+      (format stream "~{(cast _ ~:/pvs:pp-dk/ _)~^ ~}" args))))
 
 ;; TODO in all logical connectors, the generated variables should be added to a
 ;; context to be available to type expressions.
