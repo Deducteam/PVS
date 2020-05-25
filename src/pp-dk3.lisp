@@ -21,18 +21,15 @@
 
 ;;; Contexts
 
-(declaim (type (or (cons bind-decl *) null) *ctx*))
+(deftype context ()
+  "Type of contexts."
+  '(or (cons bind-decl *) null))
+
+(declaim (type context *ctx*))
 (defparameter *ctx* nil
   "Context enriched by bindings. Most recent binding on top.")
 
-(declaim (ftype (function (syntax) *) in-ctxp))
-(defgeneric in-ctxp (obj)
-  (:documentation "Returns `nil' if object OBJ is not defined in `*ctx*' and
-return the definition otherwise."))
-
-(defmethod in-ctxp ((n name)) (find (id n) *ctx* :key #'id))
-
-(declaim (type (or (cons bind-decl *) null) *ctx-var*))
+(declaim (type context *ctx-var*))
 (defparameter *ctx-var* nil
   "Successive VAR declarations, as `bind-decl', (n: VAR nat).
 They can be used in formula declaration as-is, without explicit quantification,
@@ -41,13 +38,18 @@ untyped variable, its type is sought among the declared variables.
 `bind-decl' has almost the same slots as `var-decl', so we don't lose much
 information in the transformation. ")
 
-(declaim (type (or (cons bind-decl *) null) *ctx-local*))
-(defparameter *ctx-local* nil)
+(declaim (type context *ctx-local*))
+(defparameter *ctx-local* nil
+  "Context used to translate rewriting definitions. Variables in this context
+are translated to rewriting variables.")
 
-(declaim (ftype (function (name) *) in-ctx-localp))
-(defun in-ctx-localp (elt) (find (id elt) *ctx-local* :key #'id))
+(declaim (ftype (function (context name) (or null bind-decl)) in-ctx-p))
+(defun in-ctx-p (ctx elt)
+  "Return `nil' if element ELT is not defined in context CTX, and return the
+element defined otherwise."
+  (find (id elt) ctx :key #'id))
 
-(declaim (ftype (function (cons symbol) type-expr) type-with))
+(declaim (ftype (function (context symbol) type-expr) type-with))
 (defun type-with (ctx sym)
   "Type symbol SYM searching in context CTX. CTX can contain anything that has a
 `declared-type' attribute."
@@ -186,10 +188,11 @@ arguments should be wrapped into parentheses."))
     (format stream "// Theory ~a~%" id)
     (pp-decls stream theory)))
 
-(defmethod pp-dk :before (stream (decl declaration)
+(defmethod pp-dk :around (stream (decl declaration)
                           &optional _colon-p _at-sign-p)
-  (setf *ctx* nil)
-  (setf *var-count* 0))
+  (let ((*ctx* nil)
+        (*var-count* 0))
+    (call-next-method)))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
@@ -267,7 +270,6 @@ arguments should be wrapped into parentheses."))
   (print "const-decl")
   (with-slots (id declared-type type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
-    (format t "~%Formals: ~a" formals)
     (if definition
         (progn
           (format stream "definition ~/pvs:pp-sym/~_ " id)
@@ -422,10 +424,10 @@ it with a sigil."
   (print-debug "name")
   (with-slots (id) ex
     (cond
-      ((in-ctxp ex)       (format stream "~/pvs:pp-sym/" id))
-      ((in-ctx-localp ex) (format stream "$~/pvs:pp-sym/" id))
+      ((in-ctx-p *ctx* ex) (format stream "~/pvs:pp-sym/" id))
+      ((in-ctx-p *ctx-local* ex) (format stream "$~/pvs:pp-sym/" id))
       ;; Else, the symbol comes from the signature
-      (t                  (format stream "~/pvs:pp-sym/" id)))))
+      (t (format stream "~/pvs:pp-sym/" id)))))
 
 (declaim (ftype (function (expr) *) pp-cast))
 (defun pp-cast (stream expr &optional colon-p _at-sign-p)
