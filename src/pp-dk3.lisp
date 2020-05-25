@@ -4,9 +4,11 @@
 (defparameter *use-implicits* nil
   "Set to non-nil to use implicits where it can be.")
 
+(declaim (type (cons (cons symbol symbol) *) *dk-sym-map*))
 (defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
   "Maps PVS names to names of the encoding.")
 
+(declaim (ftype (function (syntax string) *) to-dk3))
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (with-open-file (stream file :direction :output :if-exists :supersede)
@@ -18,9 +20,11 @@
 
 ;;; Contexts
 
+(declaim (type (or (cons bind-decl *) null) *ctx*))
 (defparameter *ctx* nil
   "Context enriched by bindings. Most recent binding on top.")
 
+(declaim (ftype (function (syntax) (or nil type-expr)) in-ctxp))
 (defgeneric in-ctxp (obj)
   (:documentation "Returns `nil' if object OBJ is not defined in `*ctx*' and
 return the definition otherwise."))
@@ -28,6 +32,7 @@ return the definition otherwise."))
 (defmethod in-ctxp ((name name-expr))
   (find (id name) *ctx* :key #'id))
 
+(declaim (type (or (cons bind-decl *) null) *ctx-var*))
 (defparameter *ctx-var* nil
   "Successive VAR declarations, as `bind-decl', (n: VAR nat).
 They can be used in formula declaration as-is, without explicit quantification,
@@ -36,16 +41,14 @@ untyped variable, its type is sought among the declared variables.
 `bind-decl' has almost the same slots as `var-decl', so we don't lose much
 information in the transformation. ")
 
-(defparameter *ctx-local* nil
-  "Context used to translate recursive functions into rewriting rules.")
-
-(declaim (ftype (function (list symbol) type-expr) type-with))
+(declaim (ftype (function (cons symbol) type-expr) type-with))
 (defun type-with (ctx sym)
   "Type symbol SYM searching in context CTX. CTX can contain anything that has a
 `declared-type' attribute."
   (let ((res (find sym ctx :key #'id)))
     (when res (declared-type res))))
 
+(declaim (ftype (function (type-expr) type-expr) currify))
 (defgeneric currify (te)
   (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]]"))
 
@@ -64,9 +67,11 @@ information in the transformation. ")
           (currify* (reverse (types domain)) range)
           te))))
 
+(declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
   "Number of generated variables. Used to create fresh variable names.")
 
+(declaim (ftype (function () string) fresh-var))
 (defun fresh-var ()
   "Provide a fresh variable name."
   (let ((var-name (format nil "pvs~d" *var-count*)))
@@ -96,6 +101,7 @@ a function name from where the debug is called)."
 
 ;;; Specialised printing functions
 
+(declaim (ftype (function (stream binding * *) *) pp-binding))
 (defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
   (:documentation
    "Prints a typed or untyped binding BINDING to stream STREAM. All bindings are
@@ -119,10 +125,12 @@ with the `bind-decl' class."
                           colon-p at-sign-p)
               (pp-sym stream id))))))
 
+(declaim (ftype (function (stream string * *) *) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
 
+(declaim (ftype (function (stream symbol * *) *) pp-sym))
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
 necessary."
@@ -137,6 +145,7 @@ necessary."
             ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
             (t (format stream "{|~(~a~)|}" sym))))))
 
+(declaim (ftype (function (stream (cons declaration *)) *) pp-decls))
 (defun pp-decls (stream decls)
   "Prints declarations DECLS to stream STREAM. We use a special function (rather
 than a `map') because PVS places the declaration of predicates *after* the
@@ -158,6 +167,7 @@ declaration of TYPE FROM."
 
 ;;; Main printing
 
+(declaim (ftype (function (stream syntax * *) *)))
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
 in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
@@ -271,7 +281,7 @@ arguments should be wrapped into parentheses."))
           (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
                   (list declared-type))))))
 
-(declaim (ftype (function bind-decl) bind-decl) varify)
+(declaim (ftype (function (bind-decl) bind-decl) varify))
 (defun varify (bd)
   "Copy `bind-decl' prepending its `id' with a sigil."
   (let ((cp (copy bd)))
@@ -414,8 +424,8 @@ arguments should be wrapped into parentheses."))
       (format stream "~/pvs:pp-dk/~_ " op)
       (format stream "~{(cast _ ~:/pvs:pp-dk/ _)~^ ~}" args))))
 
-;; TODO in all logical connectors, the generated variables should be added to a
-;; context to be available to type expressions.
+;; REVIEW in all logical connectors, the generated variables should be added to
+;; a context to be available to type expressions.
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"

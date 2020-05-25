@@ -22,9 +22,11 @@ BEGIN
   rat: TYPE
   zrat: rat
   frac: [nat, nznat -> rat]
+  pred: [nznat -> nat]
 
   % Quantification
   n, m: VAR nat
+  succ_pred: AXIOM succ(pred(n)) = n
   z_not_succ2: AXIOM succ(n) /= zero % In propositions
   plus2(n): nat = succ(succ(n))      % In defined values
   nat_builder(n): nat                % In undefined values
@@ -33,4 +35,10 @@ BEGIN
   lc_impl: LEMMA n /= zero IMPLIES n /= zero
   lc_or: LEMMA n = zero OR n /= zero
   lc_if(n): rat = IF n = zero THEN zrat ELSE frac(one, n) ENDIF
+
+  % Recursive def
+  lt: [nat, nat -> bool]
+  triangle(n: nat): RECURSIVE nat =
+              IF n = zero then zero else triangle(pred(n)) endif
+              measure n BY lt;
 END simple
