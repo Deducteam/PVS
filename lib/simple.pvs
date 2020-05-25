@@ -22,11 +22,9 @@ BEGIN
   rat: TYPE
   zrat: rat
   frac: [nat, nznat -> rat]
-  pred: [nznat -> nat]
 
   % Quantification
   n, m: VAR nat
-  succ_pred: AXIOM succ(pred(n)) = n
   z_not_succ2: AXIOM succ(n) /= zero % In propositions
   plus2(n): nat = succ(succ(n))      % In defined values
   nat_builder(n): nat                % In undefined values
@@ -38,7 +36,14 @@ BEGIN
 
   % Recursive def
   lt: [nat, nat -> bool]
+  pred: [nznat -> nat]
+  succ_pred: AXIOM succ(pred(n)) = n
+  pred_lt: AXIOM lt(pred(n), n)
+  pred_ze: AXIOM lt(zero, n)
   triangle(n: nat): RECURSIVE nat =
               IF n = zero then zero else triangle(pred(n)) endif
               measure n BY lt;
+
+  % Judgements
+  succ_nz: JUDGEMENT succ(n: nznat) HAS_TYPE nznat
 END simple

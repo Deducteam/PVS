@@ -318,8 +318,12 @@ See parse.lisp:826"
            (term (make-instance 'application
                                 :operator name
                                 :argument args)))
-      (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P"
-              declared-type term))))
+      (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P :-~&"
+              declared-type term)
+      (let* ((hd (make-instance 'name-expr :id id))
+             (uterm (make-instance 'application :operator hd
+                                                :argument args)))
+        (format stream "//   P = ~/pvs:pp-dk/.~&" uterm)))))
 
 
 (defmethod pp-dk (stream (decl expr-judgement) &optional colon-p _at-sign-p)
@@ -425,6 +429,12 @@ See parse.lisp:826"
   (print-debug "name")
   (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
 
+(declaim (ftype (function (expr) *) pp-cast))
+(defun pp-cast (stream expr &optional colon-p _at-sign-p)
+  "Print expression EXPR preceding it by a cast ``cast''."
+  (with-parens (stream colon-p)
+    (format stream "@cast _ _ _ ~:/pvs:pp-dk/ _" expr)))
+
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
   (print-debug "application")
@@ -434,7 +444,7 @@ See parse.lisp:826"
        (args (alexandria:flatten (arguments* ex))))
     (with-parens (stream colon-p)
       (format stream "~/pvs:pp-dk/~_ " op)
-      (format stream "~{(cast _ ~:/pvs:pp-dk/ _)~^ ~}" args))))
+      (format stream "~{~:/pvs:pp-cast/~^ ~}" args))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
 ;; a context to be available to type expressions.
