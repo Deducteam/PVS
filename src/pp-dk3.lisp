@@ -1,4 +1,5 @@
 (in-package :pvs)
+(require "alexandria")
 (export '(to-dk3))
 
 (defparameter *use-implicits* nil
@@ -219,8 +220,7 @@ arguments should be wrapped into parentheses."))
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (format stream "definition ~/pvs:pp-sym/ " id)
-    (map nil #'(lambda (fl) (format stream "~{~/pvs:pp-binding/ ~}" fl))
-         formals)
+    (format stream "~{~/pvs:pp-binding/ ~}" (alexandria:flatten formals))
     (format stream ": θ {|set|} ≔~%")
     (format stream "  ~i~<~/pvs:pp-dk/~:>~%" (list type-expr))))
 
@@ -265,12 +265,8 @@ arguments should be wrapped into parentheses."))
     (if definition
         (progn
           (format stream "definition ~/pvs:pp-sym/~_ " id)
-          ;; It is not clear what `formals' are, type-wise, it's a list of list
-          ;; of bind-decl
-          (map nil #'(lambda (f)
-                       ;; F here is a list of ‘bind-decl'
-                       (format stream "~{~/pvs:pp-binding/~^ ~}" f))
-               formals)
+          (format stream "~{~/pvs:pp-binding/~^ ~}"
+                  (alexandria:flatten formals))
           (format stream ": η ~/pvs:pp-dk/ ≔~&" declared-type)
           ;; Either we print in a “definition” way and type by the return type,
           ;; or we print in a “functional” way (with λ) and we type by the whole
@@ -291,11 +287,9 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p _at-sign-p)
   (print-debug "def-decl")
   (with-slots (id declared-type definition formals) decl
-    (format t "Formals: ~s" formals)
     (format stream "// Recursive declaration ~a~%" id)
     (format stream "symbol ~/pvs:pp-sym/ " id)
-    (map nil #'(lambda (f) (format stream "~{~:/pvs:pp-binding/~^ ~}" f))
-         formals)
+    (format stream "~{~:/pvs:pp-binding/~^ ~}" (alexandria:flatten formals))
     (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
     (format t "~%Declaration done.")))
     ;; (format stream "rule ~:/pvs:pp-sym/" id)
@@ -312,15 +306,33 @@ arguments should be wrapped into parentheses."))
     ;;   (format stream "~{$~/pvs:pp-sym/ ~}~_ ↪ " form-ids)
     ;;   (format stream "~/pvs:pp-dk/~&" rhs))))
 
-(defmethod pp-dk (stream (decl application-judgement) &optional
-                                                        colon-p at-sign-p)
+;; TODO
+(defmethod pp-dk (stream (decl application-judgement)
+                  &optional colon-p at-sign-p)
+  "Print the judgement. A TCC is generated with the same `id'.
+See parse.lisp:826"
   (print "application-judgement")
-  (with-slots (id formals declared-type judgement-type) decl
-    (format stream "// Application judgement")
-    (format stream "theorem ~/pvs:pp-sym/:~%" id)
-    (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&" judgement-type)
-    (format stream "proof~%")
-    (format stream "admit~%")))
+  (with-slots (id formals declared-type judgement-type name) decl
+    (format stream "// Application judgement~%")
+    (let* ((args (alexandria:flatten formals))
+           (term (make-instance 'application
+                                :operator name
+                                :argument args)))
+      (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P"
+              declared-type term))))
+
+
+(defmethod pp-dk (stream (decl expr-judgement) &optional colon-p _at-sign-p)
+  (print-debug "expr-judgement")
+  (with-slots (id expr free-parameters) decl
+    (let
+        ;; See classes-decl.lisp:656
+        ((exp (first expr))
+         (typ (second expr)))
+      (format stream "// ~a~%" free-parameters)
+      (format stream "// @cast _ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ P :-~&" typ exp)
+      (format stream "//   free-param = ...~&")
+      (format stream "//   P = ~/pvs:pp-sym/ freeparams" id))))
 
 (defmethod pp-dk :after
     (stream (decl existence-tcc) &optional colon-p at-sign-p)
@@ -419,7 +431,7 @@ arguments should be wrapped into parentheses."))
   (let
       ;; Unpack completely the application, de-tuplifying everything
       ((op (operator* ex))
-       (args (arguments ex)))
+       (args (alexandria:flatten (arguments* ex))))
     (with-parens (stream colon-p)
       (format stream "~/pvs:pp-dk/~_ " op)
       (format stream "~{(cast _ ~:/pvs:pp-dk/ _)~^ ~}" args))))

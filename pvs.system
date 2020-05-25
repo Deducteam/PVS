@@ -283,6 +283,7 @@
                         (setq *pvs-has-libyices* t))))
                   (setq *pvs-system-loaded* t))
   :finally-do (progn
+<<<<<<< HEAD
 		(pvs::clear-pvs-hooks)
 		#+allegro
 		(defpackage :pvs
@@ -308,6 +309,33 @@
 		(setq *pvs-git-describe* (pvs::pvs-git-description))
 		(pvs::write-pvs-version-file)
 		)
+=======
+                #+allegro
+                (defpackage :pvs
+                  (:import-from :pvs-xml-rpc "pvs-server"))
+                #-(or cmu sbcl)
+                (pvs::BDD_bdd_init)
+                ;;(when *pvs-has-libyices*
+                ;;(pvs::nlyices-init))
+                (when *load-pvs-prelude*
+                  (pvs::load-prelude)
+                  ;;(load (format nil "~a/src/PVSio/prelude-attachments" *pvs-path*))
+                  ;;(pvs::initialize-prelude-attachments)
+                  ;;(pvs::register-manip-type pvs::*number_field* 'pvs::pvs-type-real)
+                  )
+                #+allegro
+                (let ((optfile (format nil "~a/src/closopt" *pvs-path*)))
+                  (compile-file optfile)
+                  (load optfile))
+                (pvs::remove-typecheck-caches)
+                (assert (every #'fboundp pvs::*untypecheck-hook*))
+                (asdf:clear-configuration)
+                (setq *pvs-build-time* (get-universal-time))
+                (setq *pvs-git-describe* (pvs::pvs-git-description))
+                (pvs::write-pvs-version-file)
+                )
+  :depends-on ("alexandria")
+>>>>>>> using alexandria to flatten correctly args
   :components
   ((:module ground-prover
     :source-pathname "src/ground-prover/"

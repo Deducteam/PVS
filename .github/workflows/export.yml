@@ -15,7 +15,7 @@ jobs:
 
     - name: sbcl setup
       run: |
-        sudo apt install --yes emacs ksh
+        sudo apt install --yes emacs ksh cl-alexandria
         url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
         (cd ${HOME} || exit 1
         curl "$url" -L | tar -jx
