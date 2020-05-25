@@ -36,6 +36,10 @@ untyped variable, its type is sought among the declared variables.
 `bind-decl' has almost the same slots as `var-decl', so we don't lose much
 information in the transformation. ")
 
+(defparameter *ctx-local* nil
+  "Context used to translate recursive functions into rewriting rules.")
+
+(declaim (ftype (function (list symbol) type-expr) type-with))
 (defun type-with (ctx sym)
   "Type symbol SYM searching in context CTX. CTX can contain anything that has a
 `declared-type' attribute."
@@ -266,6 +270,37 @@ arguments should be wrapped into parentheses."))
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
           (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
                   (list declared-type))))))
+
+(declaim (ftype (function bind-decl) bind-decl) varify)
+(defun varify (bd)
+  "Copy `bind-decl' prepending its `id' with a sigil."
+  (let ((cp (copy bd)))
+    (setf (slot-value cp 'id) (format nil "$~a" (id bd)))
+    cp))
+
+(defmethod pp-dk (stream (decl def-decl) &optional colon-p _at-sign-p)
+  (print-debug "def-decl")
+  (with-slots (id declared-type definition formals) decl
+    (format t "Formals: ~s" formals)
+    (format stream "// Recursive declaration ~a~%" id)
+    (format stream "symbol ~/pvs:pp-sym/ " id)
+    (map nil #'(lambda (f) (format stream "~{~:/pvs:pp-binding/~^ ~}" f))
+         formals)
+    (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
+    (format t "~%Declaration done.")))
+    ;; (format stream "rule ~:/pvs:pp-sym/" id)
+    ;; (let*
+    ;;     ;; REVIEW: meaning of ‘formals’
+    ;;     ;; It’s a list of ‘bind-decl’
+    ;;     ((formals (car formals))
+    ;;      (form-ids (mapcar #'id formals))
+    ;;      (rwvars (mapcar #'varify formals))
+    ;;      (subst-alist (mapcar #'cons formals rwvars))
+    ;;      (rhs (progn (format t "~%substit with ~s!" subst-alist)
+    ;;                  (substit definition subst-alist))))
+    ;;   (format t "~%substit done")
+    ;;   (format stream "~{$~/pvs:pp-sym/ ~}~_ ↪ " form-ids)
+    ;;   (format stream "~/pvs:pp-dk/~&" rhs))))
 
 (defmethod pp-dk (stream (decl application-judgement) &optional
                                                         colon-p at-sign-p)
