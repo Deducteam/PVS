@@ -25,13 +25,12 @@
 (defparameter *ctx* nil
   "Context enriched by bindings. Most recent binding on top.")
 
-(declaim (ftype (function (syntax) (or nil type-expr)) in-ctxp))
+(declaim (ftype (function (syntax) *) in-ctxp))
 (defgeneric in-ctxp (obj)
   (:documentation "Returns `nil' if object OBJ is not defined in `*ctx*' and
 return the definition otherwise."))
 
-(defmethod in-ctxp ((name name-expr))
-  (find (id name) *ctx* :key #'id))
+(defmethod in-ctxp ((n name)) (find (id n) *ctx* :key #'id))
 
 (declaim (type (or (cons bind-decl *) null) *ctx-var*))
 (defparameter *ctx-var* nil
@@ -41,6 +40,12 @@ such as in AXIOM succ(n) /= zero. If a constant declaration quantifies on an
 untyped variable, its type is sought among the declared variables.
 `bind-decl' has almost the same slots as `var-decl', so we don't lose much
 information in the transformation. ")
+
+(declaim (type (or (cons bind-decl *) null) *ctx-local*))
+(defparameter *ctx-local* nil)
+
+(declaim (ftype (function (name) *) in-ctx-localp))
+(defun in-ctx-localp (elt) (find (id elt) *ctx-local* :key #'id))
 
 (declaim (ftype (function (cons symbol) type-expr) type-with))
 (defun type-with (ctx sym)
@@ -97,8 +102,9 @@ information in the transformation. ")
 (defun print-debug (ind)
   "Prints debug information on standard output with IND an indication (typically
 a function name from where the debug is called)."
-  (format t "~%~a:~%" ind)
-  (format t "  ctx:~i~<~{~a~^,~_ ~}~:>~%" (list *ctx*)))
+  (format t "~%~a:" ind)
+  (format t "~%  ctx:~i~<~{~a~^,~_ ~}~:>" (list *ctx*))
+  (format t "~%  lct:~i~<~{~a~^,~_ ~}~:>" (list *ctx-local*)))
 
 ;;; Specialised printing functions
 
@@ -277,34 +283,20 @@ arguments should be wrapped into parentheses."))
           (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
                   (list declared-type))))))
 
-(declaim (ftype (function (bind-decl) bind-decl) varify))
-(defun varify (bd)
-  "Copy `bind-decl' prepending its `id' with a sigil."
-  (let ((cp (copy bd)))
-    (setf (slot-value cp 'id) (format nil "$~a" (id bd)))
-    cp))
-
-(defmethod pp-dk (stream (decl def-decl) &optional colon-p _at-sign-p)
+(defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
   (with-slots (id declared-type definition formals) decl
-    (format stream "// Recursive declaration ~a~%" id)
-    (format stream "symbol ~/pvs:pp-sym/ " id)
-    (format stream "~{~:/pvs:pp-binding/~^ ~}" (alexandria:flatten formals))
-    (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
-    (format t "~%Declaration done.")))
-    ;; (format stream "rule ~:/pvs:pp-sym/" id)
-    ;; (let*
-    ;;     ;; REVIEW: meaning of ‘formals’
-    ;;     ;; It’s a list of ‘bind-decl’
-    ;;     ((formals (car formals))
-    ;;      (form-ids (mapcar #'id formals))
-    ;;      (rwvars (mapcar #'varify formals))
-    ;;      (subst-alist (mapcar #'cons formals rwvars))
-    ;;      (rhs (progn (format t "~%substit with ~s!" subst-alist)
-    ;;                  (substit definition subst-alist))))
-    ;;   (format t "~%substit done")
-    ;;   (format stream "~{$~/pvs:pp-sym/ ~}~_ ↪ " form-ids)
-    ;;   (format stream "~/pvs:pp-dk/~&" rhs))))
+    (let ((formals (alexandria:flatten formals)))
+      (format stream "// Recursive declaration ~a~%" id)
+      (format stream "symbol ~/pvs:pp-sym/ " id)
+      (format stream "~{~:/pvs:pp-binding/~^ ~}" formals)
+      (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
+      (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ "
+              id (mapcar #'id formals))
+      (let ((*ctx-local* formals)
+            (*ctx* nil))
+        (pprint-logical-block (stream nil)
+          (pp-dk stream definition colon-p at-sign-p))))))
 
 ;; TODO
 (defmethod pp-dk (stream (decl application-judgement)
@@ -425,9 +417,15 @@ See parse.lisp:826"
         (pp-dk stream expression colon-p at-sign-p))))
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
-  "Prints name NAME to stream STREAM."
+  "Ensure that NAME is in a context. If NAME is in `*ctx-local*', then prepend
+it with a sigil."
   (print-debug "name")
-  (with-slots (id) ex (format stream "~/pvs:pp-sym/" id)))
+  (with-slots (id) ex
+    (cond
+      ((in-ctxp ex)       (format stream "~/pvs:pp-sym/" id))
+      ((in-ctx-localp ex) (format stream "$~/pvs:pp-sym/" id))
+      ;; Else, the symbol comes from the signature
+      (t                  (format stream "~/pvs:pp-sym/" id)))))
 
 (declaim (ftype (function (expr) *) pp-cast))
 (defun pp-cast (stream expr &optional colon-p _at-sign-p)
@@ -457,8 +455,9 @@ See parse.lisp:826"
          (else (third  args)))
     (when colon-p (format stream "("))
     ;; TODO: handle properly branches
-    (format stream "if ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/) (λ~a, ~/pvs:pp-dk/)"
-            prop (fresh-var) then (fresh-var) else)
+    (format stream "if ~:/pvs:pp-dk/" prop)
+    (format stream " ~_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) then))
+    (format stream " ~_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) else))
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
