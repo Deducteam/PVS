@@ -149,9 +149,9 @@ or its `type'."
   "Prints debug information on standard output with IND an indication (typically
 a function name from where the debug is called)."
   (format t "~%~a:" ind)
-  (format t "~%  tct:~i~<~{~a~^,~_ ~}~:>" (list *ctx-thy*))
-  (format t "~%  ctx:~i~<~{~a~^,~_ ~}~:>" (list *ctx*))
-  (format t "~%  lct:~i~<~{~a~^,~_ ~}~:>" (list *ctx-local*)))
+  (format t "~%  tct:~i~<~a~:>" (list *ctx-thy*))
+  (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
+  (format t "~%  lct:~i~<~a~:>" (list *ctx-local*)))
 
 ;;; Specialised printing functions
 
@@ -323,11 +323,11 @@ arguments should be wrapped into parentheses."))
   "t: TYPE FROM s"
   (print "type from")
   (with-slots (id type-value) decl
-    (format stream "definition ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/ ≔~%"
-            id 'kind *type*)
-    (format stream "  ~i~<λ~{~/pvs:pp-binding/~^ ~}~:>, ~/pvs:pp-dk/~&"
+    (format stream "definition ~/pvs:pp-sym/: ~<ϕ ~v:/pvs:pp-prenex/~:> ≔~%"
+            id (list 'kind *type*))
+    (format stream "  ~i~<λ~{~/pvs:pp-binding/~^ ~}~:>, ~<~/pvs:pp-dk/~:>~&"
             (list (mapcar #'ctxe->bind-decl *ctx-thy*))
-            type-value)
+            (list type-value))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -378,15 +378,20 @@ arguments should be wrapped into parentheses."))
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
   (with-slots (id declared-type definition formals) decl
-    (let ((formals (alexandria:flatten formals)))
+    (let ((typ (type-of-decl decl))
+          (formals (alexandria:flatten formals))
+          (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
-      (format stream "symbol ~/pvs:pp-sym/ " id)
-      (format stream "~{~:/pvs:pp-binding/~^ ~}" formals)
-      (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
+      (format stream "symbol ~/pvs:pp-sym/: " id)
+      (format stream "χ ~<~v:/pvs:pp-prenex/~:>~&" (list 'set typ))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ "
-              id (mapcar #'id formals))
-      (let ((*ctx-local* (ctx-of-bindings formals))
+              id (concatenate 'list
+                              (mapcar #'car *ctx-thy*)
+                              (mapcar #'id formals)))
+      (let ((*ctx-local* (concatenate 'list
+                                      (ctx-of-bindings formals)
+                                      *ctx-thy*))
             (*ctx* nil))
         (pprint-logical-block (stream nil)
           (pp-dk stream definition colon-p at-sign-p))))))
@@ -465,11 +470,32 @@ See parse.lisp:826"
   (let ((cte (currify te)))
     (with-slots (domain range) cte
       (when colon-p (format stream "("))
-      (format stream "~:/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)
+      (format stream "~:/pvs:pp-dk/ ~~>~_ ~/pvs:pp-dk/" domain range)
       (when colon-p (format stream ")")))))
 ;; TODO: domain dep-binding, possibly a function pp-funtype
 
 ;;; Expressions
+
+(defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
+  "Ensure that NAME is in a context. If NAME is in `*ctx-local*', then prepend
+it with a sigil."
+  (print-debug "name")
+  (with-slots (id) ex
+    (cond
+      ((assoc id *ctx*) (format stream "~/pvs:pp-sym/" id))
+      ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
+      ((member id *signature*)
+       (with-parens (stream (>= (length *ctx-thy*) 1))
+         ;; Apply theory arguments to symbols of signature
+         (format stream "~/pvs:pp-sym/ ~{~/pvs:pp-dk/~^ ~}"
+                 id
+                 ;; Print arguments through ‘pp-dk’ because they might be in
+                 ;; ‘ctx-local’
+                 (mapcar #'(lambda (st)
+                             (make-instance 'name :id (car st)))
+                         *ctx-thy*))))
+      ;; Otherwise, it’s a symbol of the encoding
+      (t (format stream "~/pvs:pp-sym/" id)))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
@@ -485,22 +511,6 @@ See parse.lisp:826"
 
 (defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∀"))
-
-(defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
-  "Ensure that NAME is in a context. If NAME is in `*ctx-local*', then prepend
-it with a sigil."
-  (print-debug "name")
-  (with-slots (id) ex
-    (cond
-      ((assoc id *ctx*) (format stream "~/pvs:pp-sym/" id))
-      ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
-      ((member id *signature*)
-       (with-parens (stream (>= (length *ctx-thy*) 1))
-         ;; Apply theory arguments to symbols of signature
-         (format stream "~/pvs:pp-sym/ ~{~a~^ ~}"
-                 id (mapcar #'car *ctx-thy*))))
-      ;; Otherwise, it’s a symbol of the encoding
-      (t (format stream "~/pvs:pp-sym/" id)))))
 
 (declaim (ftype (function (expr) *) pp-cast))
 (defun pp-cast (stream expr &optional colon-p _at-sign-p)
