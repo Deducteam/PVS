@@ -19,7 +19,13 @@
                 "unif_rules"))
       (pp-dk stream obj))))
 
+(defparameter *type* (make-instance 'type-name :id '|type|))
+
 ;;; Contexts
+
+(declaim (type (or null (cons symbol)) *signature*))
+(defparameter *signature* nil
+  "Symbols defined in the theory.")
 
 (deftype context ()
   "A context is an association list mapping symbols to types."
@@ -64,7 +70,11 @@ contain (dependent) types.")
 
 (defmethod cform->ctxe ((cform formal-type-decl))
   "Transform type declaration in `(t . TYPE)'"
-  (cons (id cform) (make-instance 'type-name :id '|TYPE|)))
+  (cons (id cform) *type*))
+
+(defun ctxe->bind-decl (e)
+  "Convert element E of a context to a `bind-decl'."
+  (make-instance 'bind-decl :id (car e) :declared-type (cdr e)))
 
 ;;; Misc functions
 
@@ -86,6 +96,28 @@ contain (dependent) types.")
       (if (subtypep (type-of domain) 'tupletype)
           (currify* (reverse (types domain)) range)
           te))))
+
+(declaim (ftype (function (typed-declaration) type-expr) type-of-decl))
+(defun type-of-decl (decl)
+  "Provide the type of the symbol declared in DECL."
+  (labels
+      ((typ (arg)
+         "Return type of ARG: its `declared-type', or its type from `*ctx-var*'
+or its `type'."
+         (let* ((dtyp (declared-type arg))
+                (vdef (assoc (id arg) *ctx-var*)))
+           (cond
+             (dtyp dtyp)
+             (vdef (cdr vdef))
+             (t (type decl)))))
+       (f (args acc)
+         "Takes type `t' of `car' of ARGS and builds ``t ~> acc''"
+         (if (null args) acc
+             (make-instance 'funtype
+                            :domain (typ (car args))
+                            :range acc))))
+    (f (reverse (alexandria:flatten (formals decl)))
+       (declared-type decl))))
 
 (declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
@@ -131,8 +163,11 @@ a function name from where the debug is called)."
         (progn
           ;; If binding is (explicitly) typed, add the typed binding to context
           (setf *ctx* (acons id declared-type *ctx*))
-          (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
-                  id declared-type))
+          (format stream "(~/pvs:pp-sym/: ~a ~:/pvs:pp-dk/)"
+                  id
+                  ;; Use θ to decode the TYPE constant
+                  (if (equal declared-type *type*) "θ" "η")
+                  declared-type))
         (let ((vartype (cdr (assoc id *ctx-var*))))
           (if vartype
               (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
@@ -153,6 +188,38 @@ a function name from where the debug is called)."
           (with-parens (stream colon-p)
             (format stream "~a ~<(λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/)~:>"
                     quant (list (car bindings) newex)))))))
+
+(declaim (ftype (function (stream type-expr * * symbol) null) pp-prenex))
+(defun pp-prenex (stream tex &optional colon-p at-sign-p kind)
+  "Print type expression TEX of kind KIND with prenex polymorphism on
+`*ctx-thy*'. KIND can be symbol `kind', `set' or `bool'."
+  (labels ((ppp (ctx)
+             (cond
+               ((equal kind 'kind)
+                (if (null ctx)
+                    (format stream "scheme_k ~:/pvs:pp-dk/" tex)
+                    (progn
+                      (format stream "∀K ")
+                      (format stream "(")
+                      (format stream "λ~/pvs:pp-sym/, " (caar ctx))
+                      (ppp (cdr ctx))
+                      (format stream ")"))))
+               ((equal kind 'set)
+                (if (null ctx)
+                    (format stream "scheme_s ~:/pvs:pp-dk/" tex)
+                    (progn
+                      (format stream "∀S (λ~/pvs:pp-sym/," (caar ctx))
+                      (ppp (cdr ctx))
+                      (format stream ")"))))
+               ((equal kind 'bool)
+                (if (null ctx)
+                    (pp-dk stream tex colon-p at-sign-p)
+                    (progn
+                      (format stream "∀B (λ~/pvs:pp-sym/," (caar ctx))
+                      (ppp (cdr ctx))
+                      (format stream ")")))))))
+    (with-parens (stream colon-p)
+      (ppp *ctx-thy*))))
 
 (declaim (ftype (function (stream string * *) null) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
@@ -239,7 +306,9 @@ arguments should be wrapped into parentheses."))
   "t: TYPE."
   (print "type decl")
   (with-slots (id) decl
-    (format stream "constant symbol ~/pvs:pp-sym/: θ {|set|}~%" id)
+    (format stream "constant symbol ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/~%"
+            id 'kind *type*)
+    (setf *signature* (cons id *signature*))
     (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
     (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true~%" id)))
 
@@ -247,17 +316,25 @@ arguments should be wrapped into parentheses."))
   "t: TYPE = x."
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
-    (format stream "definition ~/pvs:pp-sym/ " id)
-    (format stream "~{~/pvs:pp-binding/ ~}" (alexandria:flatten formals))
-    (format stream ": θ {|set|} ≔~%")
-    (format stream "  ~i~<~/pvs:pp-dk/~:>~%" (list type-expr))))
+    (format stream "definition ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/ ≔~%"
+            id 'kind *type*)
+    (let ((formals (alexandria:flatten formals))
+          (ctx (mapcar #'ctxe->bind-decl *ctx-thy*)))
+      (format stream
+              "  ~i~<λ~{~/pvs:pp-binding/~^ ~}, ~/pvs:pp-dk/~:>~%"
+              (list (concatenate 'list ctx formals) type-expr)))
+    (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
   (print "type from")
   (with-slots (id type-value) decl
-    (format stream "definition ~/pvs:pp-sym/ ≔~%" id)
-    (format stream "  ~i~/pvs:pp-dk/~&" type-value)))
+    (format stream "definition ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/ ≔~%"
+            id 'kind *type*)
+    (format stream "  ~i~<λ~{~/pvs:pp-binding/~^ ~}~:>, ~/pvs:pp-dk/~&"
+            (list (mapcar #'ctxe->bind-decl *ctx-thy*))
+            type-value)
+    (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
   (print "formula-decl")
@@ -270,11 +347,7 @@ arguments should be wrapped into parentheses."))
          (subctx (remove-if #'(lambda (id-type)
                                 (not (member (car id-type) free-ids)))
                             *ctx-var*))
-         (bindings (mapcar #'(lambda (id-type)
-                               (make-instance 'bind-decl
-                                              :id (car id-type)
-                                              :declared-type (cdr id-type)))
-                           subctx))
+         (bindings (mapcar #'ctxe->bind-decl subctx))
          ;; Quantify universally on all free variables of `definition'
          (defbd (make-instance 'forall-expr
                                :bindings bindings
@@ -282,8 +355,8 @@ arguments should be wrapped into parentheses."))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
       (format stream " ~/pvs:pp-sym/:~%" id)
-      (format stream "  ~iε ~:<~/pvs:pp-dk/~:>~&"
-              (list defbd))
+      (format stream "  ~iε ~<~v:/pvs:pp-prenex/~:>~&" (list 'bool defbd))
+      (setf *signature* (cons id *signature*))
       (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
@@ -294,19 +367,19 @@ arguments should be wrapped into parentheses."))
   (with-slots (id declared-type type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
-        (progn
-          (format stream "definition ~/pvs:pp-sym/~_ " id)
-          (format stream "~{~/pvs:pp-binding/~^ ~}"
-                  (alexandria:flatten formals))
-          (format stream ": η ~/pvs:pp-dk/ ≔~&" declared-type)
-          ;; Either we print in a “definition” way and type by the return type,
-          ;; or we print in a “functional” way (with λ) and we type by the whole
-          ;; type of the expression, using ‘pp-prenex-type’
-          (format stream "  ~i~<~/pvs:pp-dk/~:>~&" (list definition)))
+        (let ((typ (type-of-decl decl))
+              (formals (alexandria:flatten formals))
+              (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
+          (format stream "definition ~/pvs:pp-sym/: " id)
+          (format stream "χ ~<~v:/pvs:pp-prenex/~:> ≔~&" (list 'set typ))
+          (format stream "  ~iλ~<~{~:/pvs:pp-binding/~^ ~}~:>,"
+                  (list (concatenate 'list ctx-thy formals)))
+          (format stream "~<~/pvs:pp-dk/~:>" (list definition)))
         (progn
           (format stream "symbol ~/pvs:pp-sym/:~%" id)
-          (format stream "  ~i~<η ~:/pvs:pp-dk/~:>~%"
-                  (list declared-type))))))
+          (format stream "  ~i~<χ ~v:/pvs:pp-prenex/~:>~%"
+                  (list 'set declared-type))))
+    (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
@@ -316,6 +389,7 @@ arguments should be wrapped into parentheses."))
       (format stream "symbol ~/pvs:pp-sym/ " id)
       (format stream "~{~:/pvs:pp-binding/~^ ~}" formals)
       (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
+      (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ "
               id (mapcar #'id formals))
       (let ((*ctx-local* (ctx-of-bindings formals))
@@ -426,7 +500,12 @@ it with a sigil."
     (cond
       ((assoc id *ctx*) (format stream "~/pvs:pp-sym/" id))
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
-      ;; Else, the symbol comes from the signature
+      ((member id *signature*)
+       (with-parens (stream (>= (length *ctx-thy*) 1))
+         ;; Apply theory arguments to symbols of signature
+         (format stream "~/pvs:pp-sym/ ~{~a~^ ~}"
+                 id (mapcar #'car *ctx-thy*))))
+      ;; Otherwise, it’s a symbol of the encoding
       (t (format stream "~/pvs:pp-sym/" id)))))
 
 (declaim (ftype (function (expr) *) pp-cast))
