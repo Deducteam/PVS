@@ -56,6 +56,8 @@ element defined otherwise."
   (let ((res (find sym ctx :key #'id)))
     (when res (declared-type res))))
 
+;;; Misc functions
+
 (declaim (ftype (function (type-expr) type-expr) currify))
 (defgeneric currify (te)
   (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]]"))
@@ -134,6 +136,19 @@ with the `bind-decl' class."
                           colon-p at-sign-p)
               (pp-sym stream id))))))
 
+(declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
+                pp-quantifier))
+(defun pp-quantifier (stream expr &optional colon-p at-sign-p quant)
+  (print-debug "pp-quantifier")
+  (with-slots (bindings expression) expr
+    (if (null bindings)
+        (pp-dk stream expression colon-p at-sign-p)
+        (let* ((newex (copy expr)))
+          (setf (slot-value newex 'bindings) (cdr bindings))
+          (with-parens (stream colon-p)
+            (format stream "~a ~<(λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/)~:>"
+                    quant (list (car bindings) newex)))))))
+
 (declaim (ftype (function (stream string * *) *) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
@@ -202,18 +217,14 @@ arguments should be wrapped into parentheses."))
 ;;; Declarations
 
 (defmethod pp-dk (stream (decl var-decl) &optional colon-p at-sign-p)
-  "n: VAR nat, add the declaration to the context in the form of a binding."
+  "n: VAR nat, add the declaration to `*ctx-var*' in the form of a binding."
   (flet ((bd-of-decl (d)
            "Converts declaration D to a binding declaration."
-           (with-slots (declared-type type id) d
-             (if declared-type
-                 (make-instance 'bind-decl
-                                :type (type d)
-                                :id (id d)
-                                :declared-type (declared-type d))
-                 (make-instance 'untyped-bind-decl
-                                :type (type d)
-                                :id (id d))))))
+           (make-instance 'bind-decl
+                          ;; REVIEW assign module?
+                          :type (type d)
+                          :id (id d)
+                          :declared-type (declared-type d))))
     (setf *ctx-var* (concatenate 'list *ctx-var* (list (bd-of-decl decl))))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
@@ -390,33 +401,10 @@ See parse.lisp:826"
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
-  (print "exists-expr")
-  (with-slots (bindings expression) ex
-    (if (consp bindings)
-        ;; Lexical and functional binding of car, because `bindings' seems to be
-        ;; a pointer to the attribute
-        (let ((binding (car bindings)))
-          ;; Here we update the `ex' `exists-expr' removing the first binding,
-          ;; print the binding and print the new expression
-          (setf (slot-value ex 'bindings) (cdr bindings))
-          (when colon-p (format stream "("))
-          (format stream "∃ ~<(λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/)~:>"
-                  `(,binding ,ex))
-          (when colon-p (format stream ")")))
-        (pp-dk stream expression colon-p at-sign-p))))
+  (pp-quantifier stream ex colon-p at-sign-p "∃"))
 
 (defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
-  "FORALL (x: T): t"
-  (print "forall-expr")
-  (with-slots (bindings expression) ex
-    (if (consp bindings)
-        (let ((binding (car bindings)))
-          (setf (slot-value ex 'bindings) (cdr bindings))
-          (when colon-p (format stream "("))
-          (format stream "∀ (~<λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/~:>)"
-                  `(,binding ,ex))
-          (when colon-p (format stream ")")))
-        (pp-dk stream expression colon-p at-sign-p))))
+  (pp-quantifier stream ex colon-p at-sign-p "∀"))
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
   "Ensure that NAME is in a context. If NAME is in `*ctx-local*', then prepend
