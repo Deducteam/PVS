@@ -22,8 +22,8 @@
 ;;; Contexts
 
 (deftype context ()
-  "Type of contexts."
-  '(or (cons bind-decl *) null))
+  "A context is an association list mapping symbols to types."
+  '(or (cons (cons symbol type-expr) *) null))
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
@@ -43,18 +43,15 @@ information in the transformation. ")
   "Context used to translate rewriting definitions. Variables in this context
 are translated to rewriting variables.")
 
-(declaim (ftype (function (context name) (or null bind-decl)) in-ctx-p))
-(defun in-ctx-p (ctx elt)
-  "Return `nil' if element ELT is not defined in context CTX, and return the
-element defined otherwise."
-  (find (id elt) ctx :key #'id))
-
-(declaim (ftype (function (context symbol) type-expr) type-with))
-(defun type-with (ctx sym)
-  "Type symbol SYM searching in context CTX. CTX can contain anything that has a
-`declared-type' attribute."
-  (let ((res (find sym ctx :key #'id)))
-    (when res (declared-type res))))
+(declaim (ftype (function ((or null (cons bind-decl))) context)
+                ctx-of-bindings))
+(defun ctx-of-bindings (bindings)
+  "Transforms bindings BINDINGS into a context."
+  (flet ((f (bd)
+           (cons (id bd) (if (declared-type bd)
+                             (declared-type bd)
+                             (type bd)))))
+    (mapcar #'f bindings)))
 
 ;;; Misc functions
 
@@ -112,29 +109,23 @@ a function name from where the debug is called)."
 
 ;;; Specialised printing functions
 
-(declaim (ftype (function (stream binding * *) *) pp-binding))
-(defgeneric pp-binding (stream binding &optional colon-p at-sign-p)
-  (:documentation
-   "Prints a typed or untyped binding BINDING to stream STREAM. All bindings are
-printed with this function *except* type declaration in theory."))
-
-(defmethod pp-binding :before (stream (bd binding) &optional colon-p at-sign-p)
-  "Add `id' of binding BD to `*ctx*', shadowing previous bindings."
-  (setf *ctx* (cons bd *ctx*)))
-
-(defmethod pp-binding (stream (bd bind-decl) &optional colon-p at-sign-p)
-  "(x: T), `untyped-bind-decl' is rather useless since untyped binder can end up
-with the `bind-decl' class."
-  (print-debug "bind-decl")
-  (with-slots (id declared-type) bd
+(declaim (ftype (function (stream bind-decl * *) null) pp-binding))
+(defun pp-binding (stream bd &optional colon-p at-sign-p)
+  "Print binding BD and add the variable to `*ctx*'."
+  (with-slots (id type declared-type) bd
     (if declared-type
-        (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)" id declared-type)
-        (let ((typ (type-with *ctx-var* id)))
-          (if typ
-              (pp-binding stream
-                          (make-instance 'bind-decl :id id :declared-type typ)
-                          colon-p at-sign-p)
-              (pp-sym stream id))))))
+        (progn
+          ;; If binding is (explicitly) typed, add the typed binding to context
+          (setf *ctx* (acons id declared-type *ctx*))
+          (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
+                  id declared-type))
+        (let ((vartype (cdr (assoc id *ctx-var*))))
+          (if vartype
+              (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
+                      id vartype)
+              (progn
+                (setf *ctx* (acons id type *ctx*))
+                (format stream "~/pvs:pp-sym/" id)))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
@@ -225,7 +216,9 @@ arguments should be wrapped into parentheses."))
                           :type (type d)
                           :id (id d)
                           :declared-type (declared-type d))))
-    (setf *ctx-var* (concatenate 'list *ctx-var* (list (bd-of-decl decl))))))
+    (setf *ctx-var*
+          (concatenate 'list *ctx-var*
+                       (list (cons (id decl) (declared-type decl)))))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
@@ -259,14 +252,18 @@ arguments should be wrapped into parentheses."))
         ;; Remove from `*ctx-var' variables that are not free in `definition' to
         ;; avoid creating too many abstractions on top of the definition.
         ((free-ids (map 'list #'id (freevars definition)))
-         (subctx (remove-if #'(lambda (bd)
-                                (not (member (id bd) free-ids)))
+         (subctx (remove-if #'(lambda (id-type)
+                                (not (member (car id-type) free-ids)))
                             *ctx-var*))
+         (bindings (mapcar #'(lambda (id-type)
+                               (make-instance 'bind-decl
+                                              :id (car id-type)
+                                              :declared-type (cdr id-type)))
+                           subctx))
          ;; Quantify universally on all free variables of `definition'
          (defbd (make-instance 'forall-expr
-                               :bindings subctx
-                               :expression definition
-                               :commas? nil))
+                               :bindings bindings
+                               :expression definition))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
       (format stream " ~/pvs:pp-sym/:~%" id)
@@ -306,7 +303,7 @@ arguments should be wrapped into parentheses."))
       (format stream ": η ~:/pvs:pp-dk/~&" declared-type)
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ "
               id (mapcar #'id formals))
-      (let ((*ctx-local* formals)
+      (let ((*ctx-local* (ctx-of-bindings formals))
             (*ctx* nil))
         (pprint-logical-block (stream nil)
           (pp-dk stream definition colon-p at-sign-p))))))
@@ -412,8 +409,8 @@ it with a sigil."
   (print-debug "name")
   (with-slots (id) ex
     (cond
-      ((in-ctx-p *ctx* ex) (format stream "~/pvs:pp-sym/" id))
-      ((in-ctx-p *ctx-local* ex) (format stream "$~/pvs:pp-sym/" id))
+      ((assoc id *ctx*) (format stream "~/pvs:pp-sym/" id))
+      ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
       ;; Else, the symbol comes from the signature
       (t (format stream "~/pvs:pp-sym/" id)))))
 
