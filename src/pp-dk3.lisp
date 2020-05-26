@@ -5,7 +5,7 @@
 (defparameter *use-implicits* nil
   "Set to non-nil to use implicits where it can be.")
 
-(declaim (type (cons (cons symbol symbol) *) *dk-sym-map*))
+(declaim (type (cons (cons symbol symbol) list) *dk-sym-map*))
 (defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
   "Maps PVS names to names of the encoding.")
 
@@ -23,7 +23,7 @@
 
 (deftype context ()
   "A context is an association list mapping symbols to types."
-  '(or (cons (cons symbol type-expr) *) null))
+  '(or (cons (cons symbol type-expr) list) null))
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
@@ -140,12 +140,12 @@ a function name from where the debug is called)."
             (format stream "~a ~<(λ~/pvs:pp-binding/, ~_~/pvs:pp-dk/)~:>"
                     quant (list (car bindings) newex)))))))
 
-(declaim (ftype (function (stream string * *) *) pp-reqopen))
+(declaim (ftype (function (stream string * *) null) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
 
-(declaim (ftype (function (stream symbol * *) *) pp-sym))
+(declaim (ftype (function (stream symbol * *) null) pp-sym))
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
 necessary."
@@ -160,7 +160,7 @@ necessary."
             ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
             (t (format stream "{|~(~a~)|}" sym))))))
 
-(declaim (ftype (function (stream (cons declaration *)) *) pp-decls))
+(declaim (ftype (function (stream (cons declaration list)) null) pp-decls))
 (defun pp-decls (stream decls)
   "Prints declarations DECLS to stream STREAM. We use a special function (rather
 than a `map') because PVS places the declaration of predicates *after* the
@@ -182,7 +182,7 @@ declaration of TYPE FROM."
 
 ;;; Main printing
 
-(declaim (ftype (function (stream syntax * *) *)))
+(declaim (ftype (function (stream syntax * *) null)))
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
 in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
