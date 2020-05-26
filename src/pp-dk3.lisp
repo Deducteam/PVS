@@ -193,31 +193,25 @@ a function name from where the debug is called)."
 (defun pp-prenex (stream tex &optional colon-p at-sign-p kind)
   "Print type expression TEX of kind KIND with prenex polymorphism on
 `*ctx-thy*'. KIND can be symbol `kind', `set' or `bool'."
-  (labels ((ppp (ctx)
+  (labels ((ppqu (qu ctx)
+             (format stream "~a " qu)
+             (with-parens (stream t)
+               (format stream "λ~/pvs:pp-sym/, " (caar ctx))
+               (ppp (cdr ctx))))
+           (ppp (ctx)
              (cond
                ((equal kind 'kind)
                 (if (null ctx)
                     (format stream "scheme_k ~:/pvs:pp-dk/" tex)
-                    (progn
-                      (format stream "∀K ")
-                      (format stream "(")
-                      (format stream "λ~/pvs:pp-sym/, " (caar ctx))
-                      (ppp (cdr ctx))
-                      (format stream ")"))))
+                    (ppqu "∀K" ctx)))
                ((equal kind 'set)
                 (if (null ctx)
                     (format stream "scheme_s ~:/pvs:pp-dk/" tex)
-                    (progn
-                      (format stream "∀S (λ~/pvs:pp-sym/," (caar ctx))
-                      (ppp (cdr ctx))
-                      (format stream ")"))))
+                    (ppqu "∀S" ctx)))
                ((equal kind 'bool)
                 (if (null ctx)
                     (pp-dk stream tex colon-p at-sign-p)
-                    (progn
-                      (format stream "∀B (λ~/pvs:pp-sym/," (caar ctx))
-                      (ppp (cdr ctx))
-                      (format stream ")")))))))
+                    (ppqu "∀B" ctx))))))
     (with-parens (stream colon-p)
       (ppp *ctx-thy*))))
 
