@@ -53,6 +53,19 @@ are translated to rewriting variables.")
                              (type bd)))))
     (mapcar #'f bindings)))
 
+(declaim (type context *ctx-thy*))
+(defparameter *ctx-thy* nil
+  "Contain theory formals. Slightly different from other contexts since they can
+contain (dependent) types.")
+
+(declaim (ftype (function (formal-decl) (cons symbol type-expr)) cform->ctxe))
+(defgeneric cform->ctxe (cform)
+  (:documentation "Convert a theory formal CFORM to a context element."))
+
+(defmethod cform->ctxe ((cform formal-type-decl))
+  "Transform type declaration in `(t . TYPE)'"
+  (cons (id cform) (make-instance 'type-name :id '|TYPE|)))
+
 ;;; Misc functions
 
 (declaim (ftype (function (type-expr) type-expr) currify))
@@ -104,6 +117,7 @@ are translated to rewriting variables.")
   "Prints debug information on standard output with IND an indication (typically
 a function name from where the debug is called)."
   (format t "~%~a:" ind)
+  (format t "~%  tct:~i~<~{~a~^,~_ ~}~:>" (list *ctx-thy*))
   (format t "~%  ctx:~i~<~{~a~^,~_ ~}~:>" (list *ctx*))
   (format t "~%  lct:~i~<~{~a~^,~_ ~}~:>" (list *ctx-local*)))
 
@@ -192,7 +206,8 @@ arguments should be wrapped into parentheses."))
   "Prints the declarations of module MOD."
   (with-slots (id theory formals-sans-usings) mod
     (format stream "// Theory ~a~%" id)
-    (pp-decls stream theory)))
+    (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
+      (pp-decls stream theory))))
 
 (defmethod pp-dk :around (stream (decl declaration)
                           &optional _colon-p _at-sign-p)

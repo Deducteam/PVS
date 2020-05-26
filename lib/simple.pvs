@@ -1,4 +1,4 @@
-simple: THEORY
+simple[d: TYPE]: THEORY
 BEGIN
   % Basic
   naturals: TYPE
