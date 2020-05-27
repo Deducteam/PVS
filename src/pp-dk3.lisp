@@ -2,8 +2,8 @@
 (require "alexandria")
 (export '(to-dk3))
 
-(defparameter *use-implicits* nil
-  "Set to non-nil to use implicits where it can be.")
+(defparameter *explicit* nil
+  "Set to non-nil avoid using implicits.")
 
 (declaim (type (cons (cons symbol symbol) list) *dk-sym-map*))
 (defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
@@ -81,22 +81,37 @@ contain (dependent) types.")
 
 (declaim (ftype (function (type-expr) type-expr) currify))
 (defgeneric currify (te)
-  (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]]"))
+  (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]].
+Recurses only in function types, that is, the type {x: [a, b -> c] | p} won't be
+converted to {x: [a -> [b -> c]] | p}."))
 
 (defmethod currify ((te funtype))
   (labels ((currify* (ts acc)
              "Currifies types TS with range ACC."
              (if (consp ts)
-                 (currify* (cdr ts) (make-instance 'funtype
-                                                   :domain (car ts)
-                                                   :range acc))
-                 ;; Recursive curryfication of `(car ts)' is handled by
-                 ;; pp-dk
+                 (currify* (cdr ts)
+                           (make-instance 'funtype
+                                          :domain (currify (car ts))
+                                          :range acc))
                  acc)))
     (with-slots (domain range) te
       (if (subtypep (type-of domain) 'tupletype)
           (currify* (reverse (types domain)) range)
           te))))
+
+(defmethod currify ((te type-name)) te)
+
+(defmethod currify ((te subtype)) te)
+
+(declaim (ftype (function (type-expr) (cons type-expr list)) funtype->types))
+(defun funtype->types (ex)
+  "Extract types of funtion type EX. For instance, ``[a -> b -> c]'' is
+converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
+  (labels ((f->t (ex)
+             (if (funtype? ex)
+                 (cons (domain ex) (f->t (range ex)))
+                 (list ex))))
+    (f->t (currify ex))))
 
 (declaim (ftype (function (typed-declaration) type-expr) type-of-decl))
 (defun type-of-decl (decl)
@@ -233,6 +248,14 @@ a λ)."
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
   "Prints a require open module MOD directive on stream STREAM."
   (format stream "require open personoj.encodings.~a" mod))
+
+(declaim (ftype (function (stream (cons expr type-expr) * *) null) pp-cast))
+(defun pp-cast (stream at &optional colon-p _at-sign-p)
+  "Print a casting of `car' of AT to type `cdr' of AT."
+  (with-parens (stream colon-p)
+    (format stream
+            "cast ~:[~;_ ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
+            *explicit* (cdr at) (car at))))
 
 (declaim (ftype (function (stream symbol * *) null) pp-sym))
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
@@ -528,22 +551,22 @@ it with a sigil."
 (defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∀"))
 
-(declaim (ftype (function (expr) *) pp-cast))
-(defun pp-cast (stream expr &optional colon-p _at-sign-p)
-  "Print expression EXPR preceding it by a cast ``cast''."
-  (with-parens (stream colon-p)
-    (format stream "@cast _ _ _ ~:/pvs:pp-dk/ _" expr)))
-
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
   (print-debug "application")
-  (let
-      ;; Unpack completely the application, de-tuplifying everything
-      ((op (operator* ex))
-       (args (alexandria:flatten (arguments* ex))))
-    (with-parens (stream colon-p)
-      (format stream "~/pvs:pp-dk/ ~:_" op)
-      (format stream "~{~:/pvs:pp-cast/~^ ~:_~}" args))))
+  (format t "~%~a: ~a" (operator* ex) (type (operator* ex)))
+  (let ((op (operator* ex))
+        (args (alexandria:flatten (arguments* ex))))
+    (if (type op)
+        (let* ((types (funtype->types (type op)))
+               (types (reverse (cdr (reverse types))))
+               (args (pairlis args types)))
+          (with-parens (stream colon-p)
+            (format stream "~/pvs:pp-dk/ ~:_~{~:/pvs:pp-cast/~^ ~:_~}"
+                    op args)))
+        (with-parens (stream colon-p)
+          ;; REVIEW currently, application judgement generate such cases
+          (format stream "~/pvs:pp-dk/ ~:_~{~:/pvs:pp-dk/~^ ~:_~}" op args)))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
 ;; a context to be available to type expressions.
