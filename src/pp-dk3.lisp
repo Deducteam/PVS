@@ -113,28 +113,6 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
                  (list ex))))
     (f->t (currify ex))))
 
-(declaim (ftype (function (typed-declaration) type-expr) type-of-decl))
-(defun type-of-decl (decl)
-  "Provide the type of the symbol declared in DECL."
-  (labels
-      ((typ (arg)
-         "Return type of ARG: its `declared-type', or its type from `*ctx-var*'
-or its `type'."
-         (let* ((dtyp (declared-type arg))
-                (vdef (assoc (id arg) *ctx-var*)))
-           (cond
-             (dtyp dtyp)
-             (vdef (cdr vdef))
-             (t (type decl)))))
-       (f (args acc)
-         "Takes type `t' of `car' of ARGS and builds ``t ~> acc''"
-         (if (null args) acc
-             (make-instance 'funtype
-                            :domain (typ (car args))
-                            :range acc))))
-    (f (reverse (alexandria:flatten (formals decl)))
-       (declared-type decl))))
-
 (declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
   "Number of generated variables. Used to create fresh variable names.")
@@ -402,12 +380,11 @@ arguments should be wrapped into parentheses."))
   (with-slots (id declared-type type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
-        (let* ((typ (type-of-decl decl))
-               (formals (alexandria:flatten formals))
+        (let* ((formals (alexandria:flatten formals))
                (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*))
                (bindings (concatenate 'list ctx-thy formals)))
           (format stream "definition ~/pvs:pp-sym/: " id)
-          (format stream "χ ~v:/pvs:pp-prenex/ ≔ ~:_" 'set typ)
+          (format stream "χ ~v:/pvs:pp-prenex/ ≔ ~:_" 'set (currify type))
           (pp-abstraction stream definition nil nil bindings))
         (progn
           (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
@@ -416,13 +393,12 @@ arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
-  (with-slots (id declared-type definition formals) decl
-    (let ((typ (type-of-decl decl))
-          (formals (alexandria:flatten formals))
+  (with-slots (id declared-type definition formals type) decl
+    (let ((formals (alexandria:flatten formals))
           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
       (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
-      (format stream "χ ~v:/pvs:pp-prenex/~&" 'set typ)
+      (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify type))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
