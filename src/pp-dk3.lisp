@@ -13,7 +13,8 @@
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (with-open-file (stream file :direction :output :if-exists :supersede)
-    (let ((*print-pretty* t))
+    (let ((*print-pretty* t)
+          (*print-right-margin* 78))
       (format stream "~{~/pvs:pp-reqopen/~&~}"
               '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"
                 "unif_rules"))
@@ -300,8 +301,9 @@ arguments should be wrapped into parentheses."))
   "t: TYPE."
   (print "type decl")
   (with-slots (id) decl
-    (format stream "constant symbol ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/~%"
-            id 'kind *type*)
+    (format stream
+            "~<constant symbol ~/pvs:pp-sym/: ~2i~:_ϕ ~v:/pvs:pp-prenex/~:>~%"
+            (list id 'kind *type*))
     (setf *signature* (cons id *signature*))
     (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
     (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true~%" id)))
@@ -310,24 +312,25 @@ arguments should be wrapped into parentheses."))
   "t: TYPE = x."
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
-    (format stream "definition ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/ ≔~%"
-            id 'kind *type*)
-    (let ((formals (alexandria:flatten formals))
-          (ctx (mapcar #'ctxe->bind-decl *ctx-thy*)))
-      (format stream
-              "  ~i~<λ~{~/pvs:pp-binding/~^ ~}, ~/pvs:pp-dk/~:>~%"
-              (list (concatenate 'list ctx formals) type-expr)))
+    (pprint-logical-block (stream nil)
+      (format stream "definition ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/ ≔ ~%"
+              id 'kind *type*)
+      (pprint-newline :fill)
+      (let* ((formals (alexandria:flatten formals))
+             (ctx (mapcar #'ctxe->bind-decl *ctx-thy*))
+             (bindings (concatenate 'list ctx formals)))
+        (format stream "~<λ~{~/pvs:pp-binding/~^ ~}, ~/pvs:pp-dk/~:>~%"
+                (list bindings type-expr))))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
   (print "type from")
   (with-slots (id type-value) decl
-    (format stream "definition ~/pvs:pp-sym/: ~<ϕ ~v:/pvs:pp-prenex/~:> ≔~%"
-            id (list 'kind *type*))
-    (format stream "  ~i~<λ~{~/pvs:pp-binding/~^ ~}~:>, ~<~/pvs:pp-dk/~:>~&"
-            (list (mapcar #'ctxe->bind-decl *ctx-thy*))
-            (list type-value))
+    (format stream "definition ~/pvs:pp-sym/: ~:_ϕ ~v:/pvs:pp-prenex/ ≔ ~:_"
+            id 'kind *type*)
+    (format stream "~<λ~{~/pvs:pp-binding/~^ ~}, ~2i~:_~/pvs:pp-dk/~:>~&"
+            (list (mapcar #'ctxe->bind-decl *ctx-thy*) type-value))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -348,8 +351,8 @@ arguments should be wrapped into parentheses."))
                                :expression definition))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
-      (format stream " ~/pvs:pp-sym/:~%" id)
-      (format stream "  ~iε ~<~v:/pvs:pp-prenex/~:>~&" (list 'bool defbd))
+      (format stream " ~/pvs:pp-sym/: ~:_" id)
+      (format stream "ε ~v:/pvs:pp-prenex/~&" 'bool defbd)
       (setf *signature* (cons id *signature*))
       (unless axiomp
         (format stream "proof~%")
@@ -365,14 +368,13 @@ arguments should be wrapped into parentheses."))
               (formals (alexandria:flatten formals))
               (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
           (format stream "definition ~/pvs:pp-sym/: " id)
-          (format stream "χ ~<~v:/pvs:pp-prenex/~:> ≔~&" (list 'set typ))
-          (format stream "  ~iλ~<~{~:/pvs:pp-binding/~^ ~}~:>,"
-                  (list (concatenate 'list ctx-thy formals)))
-          (format stream "~<~/pvs:pp-dk/~:>" (list definition)))
+          (format stream "χ ~v:/pvs:pp-prenex/ ≔ ~:_" 'set typ)
+          (format stream "λ~{~:/pvs:pp-binding/~^ ~},"
+                  (concatenate 'list ctx-thy formals))
+          (format stream "~/pvs:pp-dk/" definition))
         (progn
-          (format stream "symbol ~/pvs:pp-sym/:~%" id)
-          (format stream "  ~i~<χ ~v:/pvs:pp-prenex/~:>~%"
-                  (list 'set declared-type))))
+          (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
+          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set declared-type)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
@@ -382,10 +384,10 @@ arguments should be wrapped into parentheses."))
           (formals (alexandria:flatten formals))
           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
-      (format stream "symbol ~/pvs:pp-sym/: " id)
-      (format stream "χ ~<~v:/pvs:pp-prenex/~:>~&" (list 'set typ))
+      (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
+      (format stream "χ ~v:/pvs:pp-prenex/~&" 'set typ)
       (setf *signature* (cons id *signature*))
-      (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ "
+      (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
                               (mapcar #'car *ctx-thy*)
                               (mapcar #'id formals)))
@@ -453,15 +455,16 @@ See parse.lisp:826"
   (print "subtype")
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
-      (format stream "psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/"
-              supertype predicate))))
+      (format stream "~<psub {~/pvs:pp-dk/} ~5i~:_~:/pvs:pp-dk/~:>"
+              (list supertype predicate)))))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM."
   (print "type app")
   (with-slots (type parameters) te
     (when colon-p (format stream "("))
-    (format stream "~<~/pvs:pp-dk/ ~{/pvs:pp-dk/~^ ~}~:>" `(,type ,parameters))
+    (format stream "~<~/pvs:pp-dk/ ~:_~i~{/pvs:pp-dk/~^ ~}~:>"
+            (list type parameters))
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
@@ -470,7 +473,7 @@ See parse.lisp:826"
   (let ((cte (currify te)))
     (with-slots (domain range) cte
       (when colon-p (format stream "("))
-      (format stream "~:/pvs:pp-dk/ ~~>~_ ~/pvs:pp-dk/" domain range)
+      (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range)
       (when colon-p (format stream ")")))))
 ;; TODO: domain dep-binding, possibly a function pp-funtype
 
@@ -502,8 +505,8 @@ it with a sigil."
   (print "lambda-expr")
   (with-slots (bindings expression) ex
     (when colon-p (format stream "("))
-    (format stream "λ~{~/pvs:pp-binding/~},~_ ~<~/pvs:pp-dk/~:@>"
-            bindings `(,expression))
+    (format stream "~<λ~{~/pvs:pp-binding/~}, ~2i~:_~/pvs:pp-dk/~:@>"
+            (list bindings expression))
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
@@ -526,8 +529,8 @@ it with a sigil."
       ((op (operator* ex))
        (args (alexandria:flatten (arguments* ex))))
     (with-parens (stream colon-p)
-      (format stream "~/pvs:pp-dk/~_ " op)
-      (format stream "~{~:/pvs:pp-cast/~^ ~}" args))))
+      (format stream "~/pvs:pp-dk/ ~:_" op)
+      (format stream "~{~:/pvs:pp-cast/~^ ~:_~}" args))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
 ;; a context to be available to type expressions.
@@ -541,15 +544,15 @@ it with a sigil."
     (when colon-p (format stream "("))
     ;; TODO: handle properly branches
     (format stream "if ~:/pvs:pp-dk/" prop)
-    (format stream " ~_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) then))
-    (format stream " ~_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) else))
+    (format stream " ~:_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) then))
+    (format stream " ~:_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) else))
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
   (print "disequation")
   (with-parens (stream colon-p)
-    (format stream "neq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
+    (format stream "neq ~:_~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
 
 (defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
   "a /= b"
