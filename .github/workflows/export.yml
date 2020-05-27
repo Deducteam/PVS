@@ -56,8 +56,11 @@ jobs:
     - name: export
       run: |
         ./test-pp-dk.sh -f lib/simple -t simple
-        # ./test-pp-dk.sh -t funs
-        # ./test-pp-dk.sh -f lib/prelude -t operator_defs
+        ./test-pp-dk.sh -f lib/simple -t prenex
+        ./test-pp-dk.sh -f lib/prelude -t operator_defs
+        ./test-pp-dk.sh -f lib/prelude -t xor_def
+        ./test-pp-dk.sh -f lib/prelude -t quantifier_props
+        ./test-pp-dk.sh -f lib/prelude -t defined_types
 
     - name: type check
       run: |

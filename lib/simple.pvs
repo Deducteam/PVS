@@ -1,4 +1,4 @@
-simple[d: TYPE]: THEORY
+simple: THEORY
 BEGIN
   % Basic
   naturals: TYPE
@@ -47,3 +47,23 @@ BEGIN
   % Judgements
   succ_nz: JUDGEMENT succ(n: nznat) HAS_TYPE nznat
 END simple
+
+prenex[d: TYPE, r: TYPE]:THEORY
+BEGIN
+  % Type definition using theory parameters
+  funtype:TYPE = [d -> r]
+  %% Constant declarations
+  % Using theory param
+  f: funtype
+  g: [d, d -> r]
+  pr : [d -> bool]
+  subt : TYPE = {x: d | pr(x)}
+  % Not using theory param
+  t: TYPE
+  x: t
+  %% Formula declaration
+  x: VAR d
+  form: LEMMA pr(x) IMPLIES pr(x)
+  %% Constant decl
+  func(x,y:d):r = g(x,y)
+END prenex
