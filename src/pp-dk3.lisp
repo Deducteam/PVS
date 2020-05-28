@@ -2,10 +2,6 @@
 (require "alexandria")
 (export '(to-dk3))
 
-(declaim (type symbol *theory*))
-(defparameter *theory* nil
-  "Name of the current exported theory.")
-
 (defparameter *explicit* nil
   "Set to non-nil avoid using implicits.")
 
@@ -27,9 +23,12 @@ the symbols with a module id.")
                 "unif_rules"))
       (pp-dk stream obj))))
 
-(defparameter *type* (make-instance 'type-name :id '|type|))
+(declaim (type type-name *type*))
+(defparameter *type* (mk-type-name '|type|))
 
 ;;; Contexts
+
+;; TODO keep resolutions in context
 
 (declaim (type (or null (cons symbol)) *signature*))
 (defparameter *signature* nil
@@ -82,7 +81,7 @@ contain (dependent) types.")
 
 (defun ctxe->bind-decl (e)
   "Convert element E of a context to a `bind-decl'."
-  (make-instance 'bind-decl :id (car e) :declared-type (cdr e)))
+  (make!-bind-decl (car e) (cdr e)))
 
 ;;; Misc functions
 
@@ -97,9 +96,7 @@ converted to {x: [a -> [b -> c]] | p}."))
              "Currifies types TS with range ACC."
              (if (consp ts)
                  (currify* (cdr ts)
-                           (make-instance 'funtype
-                                          :domain (currify (car ts))
-                                          :range acc))
+                           (make-funtype (currify (car ts)) acc))
                  acc)))
     (with-slots (domain range) te
       (if (subtypep (type-of domain) 'tupletype)
@@ -287,10 +284,9 @@ in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
 arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
-  "Print the declarations of module MOD. Set `*theory*' to the `id' of MOD."
+  "Print the declarations of module MOD."
   (with-slots (id theory formals-sans-usings) mod
     (format stream "// Theory ~a~%" id)
-    (setf *theory* id)
     (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
       (pp-decls stream theory))))
 
@@ -309,16 +305,9 @@ arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (decl var-decl) &optional colon-p at-sign-p)
   "n: VAR nat, add the declaration to `*ctx-var*' in the form of a binding."
-  (flet ((bd-of-decl (d)
-           "Converts declaration D to a binding declaration."
-           (make-instance 'bind-decl
-                          ;; REVIEW assign module?
-                          :type (type d)
-                          :id (id d)
-                          :declared-type (declared-type d))))
-    (setf *ctx-var*
-          (concatenate 'list *ctx-var*
-                       (list (cons (id decl) (declared-type decl)))))))
+  (setf *ctx-var*
+        (concatenate 'list *ctx-var*
+                     (list (cons (id decl) (declared-type decl))))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
@@ -371,9 +360,7 @@ arguments should be wrapped into parentheses."))
                             *ctx-var*))
          (bindings (mapcar #'ctxe->bind-decl subctx))
          ;; Quantify universally on all free variables of `definition'
-         (defbd (make-instance 'forall-expr
-                               :bindings bindings
-                               :expression definition))
+         (defbd (make!-forall-expr bindings definition))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (format stream (if axiomp "symbol" "theorem"))
       (format stream " ~/pvs:pp-sym/: ~:_" id)
@@ -429,12 +416,10 @@ See parse.lisp:826"
   (with-slots (id formals declared-type judgement-type name) decl
     (format stream "// Application judgement~%")
     (let* ((args (alexandria:flatten formals))
-           (term (make-instance 'application
-                                :operator name
-                                :argument args)))
+           (term (make!-application name args)))
       (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P :-~&"
               declared-type term)
-      (let* ((hd (make-instance 'name-expr :id id))
+      (let* ((hd (make-instance 'name-expr :id id)) ; Unsafe here
              (uterm (make-instance 'application :operator hd
                                                 :argument args)))
         (format stream "//   P = ~/pvs:pp-dk/.~&" uterm)))))
