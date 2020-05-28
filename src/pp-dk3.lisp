@@ -26,6 +26,16 @@ the symbols with a module id.")
 (declaim (type type-name *type*))
 (defparameter *type* (mk-type-name '|type|))
 
+;;; General lisp functions
+(declaim (ftype (function (list integer) list) butfirst))
+(defun butfirst (l &optional n)
+  "Return list L without its first N conses."
+  (cond
+    ((= n 0) l)
+    ((< n 0) (error "~S invalid argument for BUTFIRST"))
+    ((consp l) (butfirst (cdr l) (- n 1)))
+    (t (error "~S ~S invalid argument to BUTFIRST" l n))))
+
 ;;; Contexts
 
 ;; TODO keep resolutions in context
@@ -201,7 +211,13 @@ a λ)."
   (if (null bindings)
       (pp-dk stream ex colon-p at-sign-p)
       (with-parens (stream colon-p)
-        (format stream "λ~{(~/pvs:pp-binding/)~}, ~/pvs:pp-dk/" bindings ex))))
+        (format stream "~<λ~{(~/pvs:pp-binding/)~}, ~1i~:_~/pvs:pp-dk/~:>"
+                (list bindings ex))))
+  ;; Remove the bindings from the context
+  ;; FIXME it would be much more elegant to use dynamic scoping
+  (progn
+    (setf *ctx* (butfirst *ctx* (length bindings)))
+    nil))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
@@ -252,7 +268,7 @@ a λ)."
   "Print a casting of `car' of AT to type `cdr' of AT."
   (with-parens (stream colon-p)
     (format stream
-            "cast ~:[~;_ ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
+            "cast ~:[~;{_} ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
             *explicit* (cdr at) (car at))))
 
 (declaim (ftype (function (stream (cons declaration list)) null) pp-decls))
@@ -340,10 +356,14 @@ arguments should be wrapped into parentheses."))
   "t: TYPE FROM s"
   (print "type from")
   (with-slots (id type-value) decl
-    (format stream "definition ~/pvs:pp-sym/: ~:_ϕ ~v:/pvs:pp-prenex/ ≔ ~:_"
-            id 'kind *type*)
-    (pp-abstraction stream type-value nil nil
-                      (mapcar #'ctxe->bind-decl *ctx-thy*))
+    (pprint-logical-block (stream nil)
+      (format stream "definition ~/pvs:pp-sym/: " id)
+      (pprint-indent :block 2 stream)
+      (pprint-newline :fill stream)
+      (format stream "ϕ ~v:/pvs:pp-prenex/ ≔ " 'kind *type*)
+      (pprint-newline :fill stream)
+      (pp-abstraction stream type-value nil nil
+                      (mapcar #'ctxe->bind-decl *ctx-thy*)))
     (pprint-newline :mandatory stream)
     (setf *signature* (cons id *signature*))))
 
@@ -362,14 +382,17 @@ arguments should be wrapped into parentheses."))
          ;; Quantify universally on all free variables of `definition'
          (defbd (make!-forall-expr bindings definition))
          (axiomp (member spelling '(AXIOM POSTULATE))))
-      (format stream (if axiomp "symbol" "theorem"))
-      (format stream " ~/pvs:pp-sym/: ~:_" id)
-      (format stream "ε ~v:/pvs:pp-prenex/~&" 'bool defbd)
+      (pprint-logical-block (stream nil)
+        (format stream (if axiomp "symbol" "theorem"))
+        (format stream " ~/pvs:pp-sym/: " id)
+        (pprint-indent :block 2 stream)
+        (pprint-newline :fill stream)
+        (format stream "ε ~v:/pvs:pp-prenex/~&" 'bool defbd))
       (setf *signature* (cons id *signature*))
       (unless axiomp
         (format stream "proof~%")
         ;; TODO: export proof
-        (format stream "admit~%")))))
+        (format stream "abort~%")))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
@@ -379,12 +402,18 @@ arguments should be wrapped into parentheses."))
         (let* ((formals (alexandria:flatten formals))
                (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*))
                (bindings (concatenate 'list ctx-thy formals)))
-          (format stream "definition ~/pvs:pp-sym/: " id)
-          (format stream "χ ~v:/pvs:pp-prenex/ ≔ ~:_" 'set (currify type))
-          (pp-abstraction stream definition nil nil bindings))
+          (pprint-logical-block (stream nil)
+            (format stream "definition ~/pvs:pp-sym/: " id)
+            (pprint-indent :block 2 stream)
+            (pprint-newline :fill stream)
+            (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set (currify type))
+            (pprint-newline :fill stream)
+            (pp-abstraction stream definition nil nil bindings)))
         (progn
-          (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
-          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set declared-type)))
+          (pprint-logical-block (stream nil)
+            (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
+            (pprint-indent :block 2 stream)
+            (format stream "χ ~v:/pvs:pp-prenex/~&" 'set declared-type))))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
@@ -393,8 +422,11 @@ arguments should be wrapped into parentheses."))
     (let ((formals (alexandria:flatten formals))
           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
-      (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
-      (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify type))
+      (pprint-logical-block (stream nil)
+        (format stream "symbol ~/pvs:pp-sym/: " id)
+        (pprint-indent :block 2 stream)
+        (pprint-newline :fill stream)
+        (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify type)))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
@@ -449,6 +481,7 @@ See parse.lisp:826"
 ;;; Type expressions
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
+  ;; REVIEW this function might be obsolete since we currify everything
   "[bool, bool]"
   (print "tupletype")
   (with-slots (types) te
@@ -496,15 +529,17 @@ it with a sigil."
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
       ((member id *signature*)
        (with-parens (stream (not (null *ctx-thy*)))
-         ;; Apply theory arguments to symbols of signature
-         (format stream "~/pvs:pp-sym/ ~{~/pvs:pp-dk/~^ ~}"
-                 id
-                 ;; Print arguments through ‘pp-dk’ because they might be in
-                 ;; ‘ctx-local’
-                 (mapcar #'(lambda (st)
-                             (make-instance 'name :id (car st)))
-                         *ctx-thy*))))
+         (pp-sym stream id)
+         (when (not (null *ctx-thy*))
+           ;; Apply theory arguments to symbols of signature
+           (format stream " ~{~/pvs:pp-dk/~^ ~}"
+                   ;; Print arguments through ‘pp-dk’ because they might be in
+                   ;; ‘ctx-local’
+                   (mapcar #'(lambda (st)
+                               (make-instance 'name :id (car st)))
+                           *ctx-thy*)))))
       ((not (assoc id *dk-sym-map*))
+       ;; TODO abstract on arguments of imported theory
        (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id))
       ;; Otherwise, it’s a symbol of the encoding
       (t (pp-sym stream id)))))
