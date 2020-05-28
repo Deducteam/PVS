@@ -2,12 +2,19 @@
 (require "alexandria")
 (export '(to-dk3))
 
+(declaim (type symbol *theory*))
+(defparameter *theory* nil
+  "Name of the current exported theory.")
+
 (defparameter *explicit* nil
   "Set to non-nil avoid using implicits.")
 
 (declaim (type (cons (cons symbol symbol) list) *dk-sym-map*))
-(defparameter *dk-sym-map* `((|boolean| . bool) (|type| . ,(intern "{|set|}")))
-  "Maps PVS names to names of the encoding.")
+(defparameter *dk-sym-map*
+  `((|boolean| . bool) (|bool| . bool) (|type| . ,(intern "{|set|}"))
+    (true . true) (false . false))
+  "Maps PVS names to names of the encoding. It is also used to avoid prepending
+the symbols with a module id.")
 
 (declaim (ftype (function (syntax string) *) to-dk3))
 (defun to-dk3 (obj file)
@@ -149,6 +156,20 @@ a function name from where the debug is called)."
 
 ;;; Specialised printing functions
 
+(declaim (ftype (function (stream symbol * *) null) pp-sym))
+(defun pp-sym (stream sym &optional colon-p at-sign-p)
+  "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
+necessary."
+  (flet ((sane-charp (c)
+           (cond
+             ((alphanumericp c) t)
+             ((char= c #\_) t)
+             (t nil))))
+    (let ((dk-sym (assoc sym *dk-sym-map*)))
+      (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
+            ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
+            (t (format stream "{|~(~a~)|}" sym))))))
+
 (declaim (ftype (function (stream bind-decl * *) null) pp-binding))
 (defun pp-binding (stream bd &optional colon-p at-sign-p)
   "Print binding BD as ``x: d t'' or simply ``x'' selecting the correct decoding
@@ -167,8 +188,10 @@ NOTE it adds the variable (and type) to `*ctx*'."
                   declared-type))
         (let ((vartype (cdr (assoc id *ctx-var*))))
           (if vartype
-              (format stream "~/pvs:pp-sym/: η ~:/pvs:pp-dk/"
-                      id vartype)
+              (progn
+                (setf *ctx* (acons id vartype *ctx*))
+                (format stream "~/pvs:pp-sym/: η ~:/pvs:pp-dk/"
+                        id vartype))
               (progn
                 (setf *ctx* (acons id type *ctx*))
                 (format stream "~/pvs:pp-sym/" id)))))))
@@ -235,21 +258,6 @@ a λ)."
             "cast ~:[~;_ ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
             *explicit* (cdr at) (car at))))
 
-(declaim (ftype (function (stream symbol * *) null) pp-sym))
-(defun pp-sym (stream sym &optional colon-p at-sign-p)
-  "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
-necessary."
-  (assert (symbolp sym))
-  (flet ((sane-charp (c)
-           (cond
-             ((alphanumericp c) t)
-             ((char= c #\_) t)
-             (t nil))))
-    (let ((dk-sym (assoc sym *dk-sym-map*)))
-      (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
-            ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
-            (t (format stream "{|~(~a~)|}" sym))))))
-
 (declaim (ftype (function (stream (cons declaration list)) null) pp-decls))
 (defun pp-decls (stream decls)
   "Prints declarations DECLS to stream STREAM. We use a special function (rather
@@ -279,9 +287,10 @@ in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
 arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
-  "Prints the declarations of module MOD."
+  "Print the declarations of module MOD. Set `*theory*' to the `id' of MOD."
   (with-slots (id theory formals-sans-usings) mod
     (format stream "// Theory ~a~%" id)
+    (setf *theory* id)
     (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
       (pp-decls stream theory))))
 
@@ -496,12 +505,12 @@ See parse.lisp:826"
   "Ensure that NAME is in a context. If NAME is in `*ctx-local*', then prepend
 it with a sigil."
   (print-debug "name")
-  (with-slots (id) ex
+  (with-slots (id mod-id) ex
     (cond
-      ((assoc id *ctx*) (format stream "~/pvs:pp-sym/" id))
+      ((assoc id *ctx*) (pp-sym stream id))
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
       ((member id *signature*)
-       (with-parens (stream (>= (length *ctx-thy*) 1))
+       (with-parens (stream (not (null *ctx-thy*)))
          ;; Apply theory arguments to symbols of signature
          (format stream "~/pvs:pp-sym/ ~{~/pvs:pp-dk/~^ ~}"
                  id
@@ -510,8 +519,10 @@ it with a sigil."
                  (mapcar #'(lambda (st)
                              (make-instance 'name :id (car st)))
                          *ctx-thy*))))
+      ((not (assoc id *dk-sym-map*))
+       (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id))
       ;; Otherwise, it’s a symbol of the encoding
-      (t (format stream "~/pvs:pp-sym/" id)))))
+      (t (pp-sym stream id)))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
@@ -549,6 +560,7 @@ it with a sigil."
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
+  (print-debug "branch")
   (let* ((args (exprs (argument ex)))
          (prop (first  args))
          (then (second args))
@@ -634,6 +646,13 @@ it with a sigil."
     (with-binapp-args (argl argr ex)
       (format stream "~:/pvs:pp-dk/ ⊃ (λ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
+
+(defmethod pp-dk (stream (ex negation) &optional colon-p _at-sign-p)
+  "NOT(A), there is also a `unary-negation' that represents NOT A."
+  (print "negation")
+  (with-parens (stream colon-p)
+    ;; NOTE we might be able to remove parens (see with LP precedence)
+    (format stream "¬ ~:/pvs:pp-dk/" (argument ex))))
 
 ;; Not documented, subclass of tuple-expr
 (defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)

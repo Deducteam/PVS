@@ -48,6 +48,13 @@ BEGIN
   succ_nz: JUDGEMENT succ(n: nznat) HAS_TYPE nznat
 END simple
 
+import: THEORY
+BEGIN
+  IMPORTING simple
+
+  four: simple.nat
+END import
+
 prenex[d: TYPE, r: TYPE]:THEORY
 BEGIN
   % Type definition using theory parameters
