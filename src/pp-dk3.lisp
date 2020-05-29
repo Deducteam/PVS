@@ -40,7 +40,7 @@ the symbols with a module id.")
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
-  "Context enriched by bindings. Most recent binding on top.")
+  "Context enriched by bindings and `var-decl'. Most recent binding on top.")
 
 (declaim (type context *ctx-local*))
 (defparameter *ctx-local* nil
@@ -166,7 +166,11 @@ necessary."
 a λ). Note that the context `*ctx*' is enriched on each printed binding. The
 binding is automatically removed from the context thanks to dynamic scoping."
   (labels
-      ((print-abstraction (term bindings)
+      ((pprint-binding (id dtype)
+         (let ((dec (if (equal dtype *type*) "θ" "η")))
+           (format stream "~<(~/pvs:pp-sym/: ~:_~a ~:/pvs:pp-dk/)~:>"
+                   (list id dec dtype))))
+       (pprint-abstraction (term bindings)
          "Print term TERM abstracting on bindings BINDINGS. Bindings are
 typed if they were typed in PVS (they may be typed by a variable declaration)."
          (if (null bindings)
@@ -174,22 +178,21 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
              (with-slots (id type declared-type) (car bindings)
                (if declared-type
                    (let ((*ctx* (acons id declared-type *ctx*)))
-                     (format stream "(~/pvs:pp-sym/: ~a ~:/pvs:pp-dk/)" id
-                             ;; Use θ to decode TYPE constant
-                             (if (equal declared-type *type*) "θ" "η")
-                             declared-type)
-                     (print-abstraction term (cdr bindings)))
-                   (let ((*ctx* (acons id type *ctx*)))
-                     (pp-sym stream id)
-                     (print-abstraction term (cdr bindings))))))))
+                     (pprint-binding id declared-type)
+                     (pprint-abstraction term (cdr bindings)))
+                   ;; Otherwise, the variable is already declared
+                   (progn
+                     (pprint-binding id (cdr (assoc id *ctx*)))
+                     (pprint-abstraction term (cdr bindings))))))))
+    (declare (ftype (function (symbol type-expr) null) pprint-binding))
     (declare (ftype (function (expr (or (cons bind-decl) null) null))
-                    print-abstraction))
+                    pprint-abstraction))
     (if (null bindings)
         (pp-dk stream ex colon-p at-sign-p)
         (with-parens (stream colon-p)
           (pprint-logical-block (stream nil)
             (write-string "λ" stream)
-            (print-abstraction ex bindings))))))
+            (pprint-abstraction ex bindings))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
