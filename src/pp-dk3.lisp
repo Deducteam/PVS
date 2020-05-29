@@ -246,35 +246,6 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
             "cast ~:[~;{_} ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
             *explicit* (cdr at) (car at))))
 
-(declaim (ftype (function (stream var-decl list) null) handle-var-decl))
-(defun handle-var-decl (stream vd rest)
-  (with-slots (id declared-type) vd
-    (let ((*ctx* (acons id declared-type *ctx*)))
-      (pp-decls stream rest))))
-
-(declaim (ftype (function (stream (or null (cons declaration list))) null)
-                pp-decls))
-(defun pp-decls (stream decls)
-  "Prints declarations DECLS to stream STREAM. We use a special function (rather
-than a `map') because PVS places the declaration of predicates *after* the
-declaration of TYPE FROM."
-  (when (not (null decls))
-    (cond
-      ((var-decl? (car decls))
-       (handle-var-decl stream (car decls) (cdr decls)))
-      ((type-from-decl? (first decls))
-       ;; In this case (TYPE FROM declaration), the predicate appears after the
-       ;; type declaration
-       (assert (>= (length decls) 2))
-       (pp-dk stream (second decls))
-       (format stream "~%")
-       (pp-dk stream (first decls))
-       (format stream "~%~%")
-       (pp-decls stream (cddr decls)))
-      (t (pp-dk stream (car decls))
-         (format stream "~%~%")
-         (pp-decls stream (cdr decls))))))
-
 ;;; Main printing
 
 (declaim (ftype (function (stream syntax * *) null)))
@@ -285,10 +256,40 @@ arguments should be wrapped into parentheses."))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
   "Print the declarations of module MOD."
-  (with-slots (id theory formals-sans-usings) mod
-    (format stream "// Theory ~a~%" id)
-    (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
-      (pp-decls stream theory))))
+  (labels
+      ((handle-var-decl (stream vd rest)
+         "Add dynamically variable declaration VD to `*ctx*' and print the rest
+of the theory REST with the new context in (dynamic) scope."
+         (with-slots (id declared-type) vd
+           (let ((*ctx* (acons id declared-type *ctx*)))
+             (pprint-decls stream rest))))
+       (pprint-decls (stream decls)
+         "Print declarations DECLS to stream STREAM. We use a special function
+(rather than a `map') because PVS places the declaration of predicates *after*
+the declaration of TYPE FROM."
+         (when (not (null decls))
+           (cond
+             ((var-decl? (car decls))
+              (handle-var-decl stream (car decls) (cdr decls)))
+             ((type-from-decl? (first decls))
+              ;; In this case (TYPE FROM declaration), the predicate appears
+              ;; after the type declaration
+              (assert (>= (length decls) 2))
+              (pp-dk stream (second decls))
+              (format stream "~%")
+              (pp-dk stream (first decls))
+              (format stream "~%~%")
+              (pprint-decls stream (cddr decls)))
+             (t (pp-dk stream (car decls))
+                (format stream "~%~%")
+                (pprint-decls stream (cdr decls)))))))
+    (declare (ftype (function (stream var-decl list) null) handle-var-decl))
+    (declare (ftype (function (stream (or null (cons declaration list))) null)
+                    pprint-decls))
+    (with-slots (id theory formals-sans-usings) mod
+      (format stream "// Theory ~a~%" id)
+      (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
+        (pprint-decls stream theory)))))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
