@@ -26,16 +26,6 @@ the symbols with a module id.")
 (declaim (type type-name *type*))
 (defparameter *type* (mk-type-name '|type|))
 
-;;; General lisp functions
-(declaim (ftype (function (list integer) list) butfirst))
-(defun butfirst (l &optional n)
-  "Return list L without its first N conses."
-  (cond
-    ((= n 0) l)
-    ((< n 0) (error "~S invalid argument for BUTFIRST"))
-    ((consp l) (butfirst (cdr l) (- n 1)))
-    (t (error "~S ~S invalid argument to BUTFIRST" l n))))
-
 ;;; Contexts
 
 ;; TODO keep resolutions in context
@@ -177,47 +167,43 @@ necessary."
             ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
             (t (format stream "{|~(~a~)|}" sym))))))
 
-(declaim (ftype (function (stream bind-decl * *) null) pp-binding))
-(defun pp-binding (stream bd &optional colon-p at-sign-p)
-  "Print binding BD as ``x: d t'' or simply ``x'' selecting the correct decoding
-function ``d''.  The binding is not typed if it wasn't in PVS.
-Use `pp-abstraction' if you want to print a complete abstraction.
-NOTE it adds the variable (and type) to `*ctx*'."
-  (with-slots (id type declared-type) bd
-    (if declared-type
-        (progn
-          ;; If binding is (explicitly) typed, add the typed binding to context
-          (setf *ctx* (acons id declared-type *ctx*))
-          (format stream "~/pvs:pp-sym/: ~a ~:/pvs:pp-dk/"
-                  id
-                  ;; Use θ to decode the TYPE constant
-                  (if (equal declared-type *type*) "θ" "η")
-                  declared-type))
-        (let ((vartype (cdr (assoc id *ctx-var*))))
-          (if vartype
-              (progn
-                (setf *ctx* (acons id vartype *ctx*))
-                (format stream "~/pvs:pp-sym/: η ~:/pvs:pp-dk/"
-                        id vartype))
-              (progn
-                (setf *ctx* (acons id type *ctx*))
-                (format stream "~/pvs:pp-sym/" id)))))))
-
 (declaim (ftype (function (stream expr * * (or (cons bind-decl) null)) null)
                 pp-abstraction))
 (defun pp-abstraction (stream ex &optional colon-p at-sign-p bindings)
   "Print expression EX on stream STREAM abstracting arguments in BINDINGS (with
-a λ)."
-  (if (null bindings)
-      (pp-dk stream ex colon-p at-sign-p)
-      (with-parens (stream colon-p)
-        (format stream "~<λ~{(~/pvs:pp-binding/)~}, ~1i~:_~/pvs:pp-dk/~:>"
-                (list bindings ex))))
-  ;; Remove the bindings from the context
-  ;; FIXME it would be much more elegant to use dynamic scoping
-  (progn
-    (setf *ctx* (butfirst *ctx* (length bindings)))
-    nil))
+a λ). Note that the context `*ctx*' is enriched on each printed binding. The
+binding is automatically removed from the context thanks to dynamic scoping."
+  (labels
+      ((print-abstraction (term bindings)
+         "Print term TERM abstracting on bindings BINDINGS. Bindings are
+typed if they were typed in PVS (they may be typed by a variable declaration)."
+         (if (null bindings)
+             (format stream ", ~:_~/pvs:pp-dk/" term)
+             (with-slots (id type declared-type) (car bindings)
+               (if declared-type
+                   (let ((*ctx* (acons id declared-type *ctx*)))
+                     (format stream "(~/pvs:pp-sym/: ~a ~:/pvs:pp-dk/)" id
+                             ;; Use θ to decode TYPE constant
+                             (if (equal declared-type *type*) "θ" "η")
+                             declared-type)
+                     (print-abstraction term (cdr bindings)))
+                   (let ((vartype (cdr (assoc id *ctx-var*))))
+                     (if vartype
+                         (let ((*ctx* (acons id vartype *ctx*)))
+                           (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
+                                   id vartype)
+                           (print-abstraction term (cdr bindings)))
+                         (let ((*ctx* (acons id type *ctx*)))
+                           (pp-sym stream id)
+                           (print-abstraction term (cdr bindings))))))))))
+    (declare (ftype (function (expr (or (cons bind-decl) null) null))
+                    print-abstraction))
+    (if (null bindings)
+        (pp-dk stream ex colon-p at-sign-p)
+        (with-parens (stream colon-p)
+          (pprint-logical-block (stream nil)
+            (write-string "λ" stream)
+            (print-abstraction ex bindings))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
@@ -409,11 +395,10 @@ arguments should be wrapped into parentheses."))
             (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set (currify type))
             (pprint-newline :fill stream)
             (pp-abstraction stream definition nil nil bindings)))
-        (progn
-          (pprint-logical-block (stream nil)
-            (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
-            (pprint-indent :block 2 stream)
-            (format stream "χ ~v:/pvs:pp-prenex/~&" 'set declared-type))))
+        (pprint-logical-block (stream nil)
+          (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
+          (pprint-indent :block 2 stream)
+          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set declared-type)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
