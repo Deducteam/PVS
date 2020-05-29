@@ -42,15 +42,6 @@ the symbols with a module id.")
 (defparameter *ctx* nil
   "Context enriched by bindings. Most recent binding on top.")
 
-(declaim (type context *ctx-var*))
-(defparameter *ctx-var* nil
-  "Successive VAR declarations, as `bind-decl', (n: VAR nat).
-They can be used in formula declaration as-is, without explicit quantification,
-such as in AXIOM succ(n) /= zero. If a constant declaration quantifies on an
-untyped variable, its type is sought among the declared variables.
-`bind-decl' has almost the same slots as `var-decl', so we don't lose much
-information in the transformation. ")
-
 (declaim (type context *ctx-local*))
 (defparameter *ctx-local* nil
   "Context used to translate rewriting definitions. Variables in this context
@@ -79,6 +70,7 @@ contain (dependent) types.")
   "Transform type declaration in `(t . TYPE)'"
   (cons (id cform) *type*))
 
+(declaim (ftype (function (cons symbol type-expr) bind-decl) ctxe->bind-decl))
 (defun ctxe->bind-decl (e)
   "Convert element E of a context to a `bind-decl'."
   (make!-bind-decl (car e) (cdr e)))
@@ -187,15 +179,9 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
                              (if (equal declared-type *type*) "θ" "η")
                              declared-type)
                      (print-abstraction term (cdr bindings)))
-                   (let ((vartype (cdr (assoc id *ctx-var*))))
-                     (if vartype
-                         (let ((*ctx* (acons id vartype *ctx*)))
-                           (format stream "(~/pvs:pp-sym/: η ~:/pvs:pp-dk/)"
-                                   id vartype)
-                           (print-abstraction term (cdr bindings)))
-                         (let ((*ctx* (acons id type *ctx*)))
-                           (pp-sym stream id)
-                           (print-abstraction term (cdr bindings))))))))))
+                   (let ((*ctx* (acons id type *ctx*)))
+                     (pp-sym stream id)
+                     (print-abstraction term (cdr bindings))))))))
     (declare (ftype (function (expr (or (cons bind-decl) null) null))
                     print-abstraction))
     (if (null bindings)
@@ -257,25 +243,34 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
             "cast ~:[~;{_} ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
             *explicit* (cdr at) (car at))))
 
-(declaim (ftype (function (stream (cons declaration list)) null) pp-decls))
+(declaim (ftype (function (stream var-decl list) null) handle-var-decl))
+(defun handle-var-decl (stream vd rest)
+  (with-slots (id declared-type) vd
+    (let ((*ctx* (acons id declared-type *ctx*)))
+      (pp-decls stream rest))))
+
+(declaim (ftype (function (stream (or null (cons declaration list))) null)
+                pp-decls))
 (defun pp-decls (stream decls)
   "Prints declarations DECLS to stream STREAM. We use a special function (rather
 than a `map') because PVS places the declaration of predicates *after* the
 declaration of TYPE FROM."
-  (if (>= (length decls) 2)
-      (let ((decl-1 (first decls))
-            (decl-2 (second decls)))
-        (if (subtypep (type-of decl-1) 'type-from-decl)
-            ;; If the first declaration is a TYPE FROM declaration,
-            ;; print the generated predicate first
-            (progn
-              (format stream "~/pvs:pp-dk/~&" decl-2)
-              (format stream "~/pvs:pp-dk/~&" decl-1)
-              (pp-decls stream (cddr decls)))
-            (progn
-              (format stream "~/pvs:pp-dk/~&" decl-1)
-              (pp-decls stream (cdr decls)))))
-      (format stream "~{~/pvs:pp-dk/~^~&~}" decls)))
+  (when (not (null decls))
+    (cond
+      ((var-decl? (car decls))
+       (handle-var-decl stream (car decls) (cdr decls)))
+      ((type-from-decl? (first decls))
+       ;; In this case (TYPE FROM declaration), the predicate appears after the
+       ;; type declaration
+       (assert (>= (length decls) 2))
+       (pp-dk stream (second decls))
+       (format stream "~%")
+       (pp-dk stream (first decls))
+       (format stream "~%~%")
+       (pp-decls stream (cddr decls)))
+      (t (pp-dk stream (car decls))
+         (format stream "~%~%")
+         (pp-decls stream (cdr decls))))))
 
 ;;; Main printing
 
@@ -292,24 +287,12 @@ arguments should be wrapped into parentheses."))
     (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
       (pp-decls stream theory))))
 
-(defmethod pp-dk :around (stream (decl declaration)
-                          &optional _colon-p _at-sign-p)
-  (let ((*ctx* nil)
-        (*var-count* 0))
-    (call-next-method)))
-
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
   (with-slots (theory-name) imp
-    (format stream "require ~a~%" theory-name)))
+    (format stream "require ~a" theory-name)))
 
 ;;; Declarations
-
-(defmethod pp-dk (stream (decl var-decl) &optional colon-p at-sign-p)
-  "n: VAR nat, add the declaration to `*ctx-var*' in the form of a binding."
-  (setf *ctx-var*
-        (concatenate 'list *ctx-var*
-                     (list (cons (id decl) (declared-type decl))))))
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
@@ -320,7 +303,7 @@ arguments should be wrapped into parentheses."))
             (list id 'kind *type*))
     (setf *signature* (cons id *signature*))
     (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
-    (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true~%" id)))
+    (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true" id)))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x."
@@ -334,8 +317,7 @@ arguments should be wrapped into parentheses."))
       (let* ((formals (alexandria:flatten formals))
              (ctx (mapcar #'ctxe->bind-decl *ctx-thy*))
              (bindings (concatenate 'list ctx formals)))
-        (pp-abstraction stream type-expr nil nil bindings)
-        (pprint-newline :mandatory stream)))
+        (pp-abstraction stream type-expr nil nil bindings)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
@@ -350,7 +332,6 @@ arguments should be wrapped into parentheses."))
       (pprint-newline :fill stream)
       (pp-abstraction stream type-value nil nil
                       (mapcar #'ctxe->bind-decl *ctx-thy*)))
-    (pprint-newline :mandatory stream)
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -358,14 +339,11 @@ arguments should be wrapped into parentheses."))
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
     (let*
-        ;; Remove from `*ctx-var' variables that are not free in `definition' to
-        ;; avoid creating too many abstractions on top of the definition.
         ((free-ids (map 'list #'id (freevars definition)))
-         (subctx (remove-if #'(lambda (id-type)
-                                (not (member (car id-type) free-ids)))
-                            *ctx-var*))
-         (bindings (mapcar #'ctxe->bind-decl subctx))
-         ;; Quantify universally on all free variables of `definition'
+         (bindings (mapcar
+                    #'(lambda (id) (ctxe->bind-decl (assoc id *ctx*)))
+                    free-ids))
+         ;; Quantify universally on all free variables of ‘definition’
          (defbd (make!-forall-expr bindings definition))
          (axiomp (member spelling '(AXIOM POSTULATE))))
       (pprint-logical-block (stream nil)
@@ -421,8 +399,7 @@ arguments should be wrapped into parentheses."))
                                       (ctx-of-bindings formals)
                                       *ctx-thy*))
             (*ctx* nil))
-        (pprint-logical-block (stream nil)
-          (pp-dk stream definition colon-p at-sign-p))))))
+        (pp-dk stream definition colon-p at-sign-p)))))
 
 ;; TODO
 (defmethod pp-dk (stream (decl application-judgement)
@@ -571,7 +548,6 @@ it with a sigil."
          (then (second args))
          (else (third  args)))
     (when colon-p (format stream "("))
-    ;; TODO: handle properly branches
     (format stream "if ~:/pvs:pp-dk/" prop)
     (format stream " ~:_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) then))
     (format stream " ~:_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) else))
