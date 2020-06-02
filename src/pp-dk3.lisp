@@ -365,25 +365,27 @@ the declaration of TYPE FROM."
   (print "formula-decl")
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
-    (let*
-        ((free-ids (map 'list #'id (freevars definition)))
-         (bindings (mapcar
-                    #'(lambda (id) (ctxe->bind-decl (assoc id *ctx*)))
-                    free-ids))
-         ;; Quantify universally on all free variables of ‘definition’
-         (defbd (make!-forall-expr bindings definition))
-         (axiomp (member spelling '(AXIOM POSTULATE))))
-      (pprint-logical-block (stream nil)
-        (format stream (if axiomp "symbol" "theorem"))
-        (format stream " ~/pvs:pp-sym/: " id)
-        (pprint-indent :block 2 stream)
-        (pprint-newline :fill stream)
-        (format stream "ε ~v:/pvs:pp-prenex/~&" 'bool defbd))
-      (setf *signature* (cons id *signature*))
-      (unless axiomp
-        (format stream "proof~%")
-        ;; TODO: export proof
-        (format stream "abort~%")))))
+    (flet ((univ-closure (ex)
+             (let* ((free-ids (mapcar #'id (freevars ex)))
+                    (bindings (mapcar
+                               #'(lambda (id)
+                                   (ctxe->bind-decl (assoc id *ctx*)))
+                               free-ids)))
+               (make!-forall-expr bindings ex))))
+      (declare (ftype (function (expr) forall-expr) univ-closure))
+      (let ((defn (univ-closure definition))
+            (axiomp (member spelling '(AXIOM POSTULATE))))
+        (pprint-logical-block (stream nil)
+          (format stream (if axiomp "symbol" "theorem"))
+          (format stream " ~/pvs:pp-sym/: " id)
+          (pprint-indent :block 2 stream)
+          (pprint-newline :fill stream)
+          (format stream "ε ~v:/pvs:pp-prenex/~&" 'bool defn))
+        (setf *signature* (cons id *signature*))
+        (unless axiomp
+          (format stream "proof~%")
+          ;; TODO: export proof
+          (format stream "abort~%"))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
