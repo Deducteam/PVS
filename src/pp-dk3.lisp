@@ -2,6 +2,13 @@
 (require "alexandria")
 (export '(to-dk3))
 
+(defun list-of-type-p (ty l)
+  (flet ((of-type-p (e) (subtypep (type-of e) ty)))
+    (every of-type-p l)))
+
+(deftype plist (ty)
+  '(satisfies list-of-type-p ty))
+
 (defparameter *explicit* nil
   "Set to non-nil avoid using implicits.")
 
@@ -282,14 +289,30 @@ the declaration of TYPE FROM."
               (pprint-decls stream (cddr decls)))
              (t (pp-dk stream (car decls))
                 (format stream "~%~%")
-                (pprint-decls stream (cdr decls)))))))
+                (pprint-decls stream (cdr decls))))))
+       (process-formals (formals theory)
+         "Handle formal parameters FORMALS of theory THEORY."
+         (if (null formals)
+             (pprint-decls stream theory)
+             (let ((c (car formals)))
+               (cond
+                 ((formal-type-decl? c)
+                  (let ((*ctx-thy* (acons (id c) *type* *ctx-thy*)))
+                    (process-formals (cdr formals) theory)))
+                 ((formal-const-decl? c)
+                  (let ((*ctx* (acons (id c) (declared-type c) *ctx*)))
+                    (process-formals (cdr formals) theory))))))))
     (declare (ftype (function (stream var-decl list) null) handle-var-decl))
-    (declare (ftype (function (stream (or null (cons declaration list))) null)
+    (declare (ftype (function
+                     (stream (or null (cons (or importing declaration) list)))
+                     null)
                     pprint-decls))
+    (declare (ftype (function ((plist formal-decl)) null) process-formals))
+    ;; (declare (ftype (function ((or null (cons formal-decl)) list) null)
+    ;;                 process-formals))
     (with-slots (id theory formals-sans-usings) mod
       (format stream "// Theory ~a~%" id)
-      (let ((*ctx-thy* (mapcar #'cform->ctxe formals-sans-usings)))
-        (pprint-decls stream theory)))))
+      (process-formals formals-sans-usings theory))))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
@@ -486,13 +509,15 @@ See parse.lisp:826"
 ;;; Expressions
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
-  "Ensure that NAME is in a context. If NAME is in `*ctx-local*', then prepend
-it with a sigil."
+  "Print name NAME applying theory formal parameters if needed."
   (print-debug "name")
-  (with-slots (id mod-id) ex
+  (with-slots (id mod-id actuals) ex
     (cond
       ((assoc id *ctx*) (pp-sym stream id))
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
+      ;; REVIEW do symbols shadow theory parameters? If so, the *signature* case
+      ;; should come before the *ctx-thy* case
+      ((assoc id *ctx-thy*) (pp-sym stream id))
       ((member id *signature*)
        (with-parens (stream (not (null *ctx-thy*)))
          (pp-sym stream id)
@@ -501,14 +526,16 @@ it with a sigil."
            (format stream " ~{~/pvs:pp-dk/~^ ~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
-                   (mapcar #'(lambda (st)
-                               (make-instance 'name :id (car st)))
+                   (mapcar #'(lambda (st) (mk-name-expr (car st)))
                            *ctx-thy*)))))
-      ((not (assoc id *dk-sym-map*))
-       ;; TODO abstract on arguments of imported theory
-       (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id))
-      ;; Otherwise, it’s a symbol of the encoding
-      (t (pp-sym stream id)))))
+      ;; Symbol of the encoding
+      ((assoc id *dk-sym-map*) (pp-sym stream id))
+      ;; Otherwise, it’s a symbol from an imported theory
+      (t (with-parens (stream (consp actuals))
+           ;; FIXME it seems that symbols from the prelude have ‘nil’ as
+           ;; ‘mod-id’
+           (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id)
+           (format stream "~{ ~/pvs:pp-dk/~}" actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"
@@ -652,3 +679,8 @@ it with a sigil."
   (with-parens (stream colon-p)
     (with-slots (type number) ex
       (format stream "cast {_} {~/pvs:pp-dk/} _ ~d _" type number))))
+
+(defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
+  "Formal parameters of theories, the `t' in `pred[t]'."
+  (print-debug "actual")
+  (pp-dk stream (expr ac) colon-p at-sign-p))
