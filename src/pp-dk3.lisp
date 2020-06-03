@@ -84,28 +84,38 @@ definitions of this context using `pp-prenex'.")
 
 ;;; Misc functions
 
-;; TODO: rather use currify dom range
-(declaim (ftype (function (type-expr) type-expr) currify))
-(defgeneric currify (te)
-  (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]].
-Recurses only in function types, that is, the type {x: [a, b -> c] | p} won't be
-converted to {x: [a -> [b -> c]] | p}."))
+(declaim (ftype (function (type-expr type-expr) funtype) currify*))
+(defgeneric currify* (dom ran)
+  (:documentation "Currify type DOM into CDOM to yield type
+[CDOM -> RAN]."))
 
-(defmethod currify ((te funtype))
-  (labels ((currify* (ts acc)
-             "Currifies types TS with range ACC."
+(defmethod currify* ((dom tupletype) ran)
+  (labels ((curr (ts acc)
+             "Make a funtype of types TS with range ACC."
              (if (consp ts)
-                 (currify* (cdr ts)
-                           (make-funtype (currify (car ts)) acc))
+                 (curr (cdr ts) (make-funtype (currify-if (car ts)) acc))
                  acc)))
-    (with-slots (domain range) te
-      (if (subtypep (type-of domain) 'tupletype)
-          (currify* (reverse (types domain)) range)
-          te))))
+    (curr (reverse (types dom)) ran)))
 
-(defmethod currify ((te type-name)) te)
+(defmethod currify* ((dom funtype) ran)
+  (make-funtype (currify* (domain dom) (range dom)) ran))
 
-(defmethod currify ((te subtype)) te)
+(defmethod currify* ((dom type-name) ran)
+  (make-funtype dom ran))
+
+(defmethod currify* ((dom subtype) ran)
+  (with-slots (predicate supertype) dom
+    (make-funtype (mk-subtype (currify-if supertype) predicate) ran)))
+
+(declaim (ftype (function (funtype) funtype) currify))
+(defun currify (tex)
+  "Currify function type TEX: transform [a, b -> c] to  [a -> [b -> c]]."
+  (currify* (domain tex) (range tex)))
+
+(declaim (ftype (function (type-expr) type-expr) currify-if))
+(defun currify-if (tex)
+  "Currify TEX if it is a funtype or leave it as it is."
+  (if (funtype? tex) (currify tex) tex))
 
 (declaim (ftype (function (type-expr) (cons type-expr list)) funtype->types))
 (defun funtype->types (ex)
@@ -115,7 +125,7 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
              (if (funtype? ex)
                  (cons (domain ex) (f->t (range ex)))
                  (list ex))))
-    (f->t (currify ex))))
+    (f->t (currify-if ex))))
 
 (declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
@@ -185,8 +195,9 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
              (format stream ", ~:_~/pvs:pp-dk/" term)
              (with-slots (id type declared-type) (car bindings)
                (if declared-type
-                   (let ((*ctx* (acons id declared-type *ctx*)))
-                     (pprint-binding id declared-type)
+                   (let* ((ctyp (currify-if declared-type))
+                          (*ctx* (acons id ctyp *ctx*)))
+                     (pprint-binding id ctyp)
                      (pprint-abstraction term (cdr bindings)))
                    ;; Otherwise, the variable is already declared
                    (progn
@@ -306,13 +317,16 @@ arguments should be wrapped into parentheses."))
       ((handle-var-decl (stream vd rest)
          "Add dynamically variable declaration VD to `*ctx*' and print the rest
 of the theory REST with the new context in (dynamic) scope."
+         (declare (type var-decl vd))
+         (declare (type list rest))
          (with-slots (id declared-type) vd
-           (let ((*ctx* (acons id declared-type *ctx*)))
-             (pprint-decls stream rest))))
-       (pprint-decls (stream decls)
+           (let ((*ctx* (acons id (currify-if declared-type) *ctx*)))
+             (pprint-decls rest))))
+       (pprint-decls (decls)
          "Print declarations DECLS to stream STREAM. We use a special function
 (rather than a `map') because PVS places the declaration of predicates *after*
 the declaration of TYPE FROM."
+         (declare (type (or null (cons (or importing declaration))) decls))
          (when (not (null decls))
            (cond
              ((var-decl? (car decls))
@@ -325,32 +339,28 @@ the declaration of TYPE FROM."
               (format stream "~%")
               (pp-dk stream (first decls))
               (format stream "~%~%")
-              (pprint-decls stream (cddr decls)))
+              (pprint-decls (cddr decls)))
              (t (pp-dk stream (car decls))
                 (format stream "~%~%")
-                (pprint-decls stream (cdr decls))))))
+                (pprint-decls (cdr decls))))))
        (process-formals (formals theory)
          "Handle formal parameters FORMALS of theory THEORY."
+         (declare (type (or null (cons formal-decl)) formals))
+         (declare (type list theory))
          ;; FIXME importing must be processed too
          (if (null formals)
-             (pprint-decls stream theory)
+             (pprint-decls theory)
              (let ((c (car formals)))
                (cond
                  ((formal-type-decl? c)
                   (let ((*ctx-thy* (acons (id c) *type* *ctx-thy*)))
                     (process-formals (cdr formals) theory)))
                  ((formal-const-decl? c)
-                  (let ((*ctx-thy* (acons (id c) (declared-type c) *ctx-thy*))
-                        ;; REVIEW adding to *ctx* might be superfluous
-                        (*ctx* (acons (id c) (declared-type c) *ctx*)))
+                  (let* ((cdtype (currify-if (declared-type c)))
+                         (*ctx-thy* (acons (id c) cdtype *ctx-thy*))
+                         ;; REVIEW adding to *ctx* might be superfluous
+                         (*ctx* (acons (id c) cdtype *ctx*)))
                     (process-formals (cdr formals) theory))))))))
-    (declare (ftype (function (stream var-decl list) null) handle-var-decl))
-    (declare (ftype (function
-                     (stream (or null (cons (or importing declaration) list)))
-                     null)
-                    pprint-decls))
-    (declare (ftype (function ((or null (cons formal-decl)) list) null)
-                    process-formals))
     (with-slots (id theory formals-sans-usings) mod
       (format stream "// Theory ~a~%" id)
       (process-formals formals-sans-usings theory))))
@@ -440,7 +450,7 @@ the declaration of TYPE FROM."
             (format stream "definition ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
-            (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set (currify type))
+            (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set (currify-if type))
             (pprint-newline :fill stream)
             (pp-abstraction stream definition nil nil bindings)))
         (pprint-logical-block (stream nil)
@@ -459,7 +469,7 @@ the declaration of TYPE FROM."
         (format stream "symbol ~/pvs:pp-sym/: " id)
         (pprint-indent :block 2 stream)
         (pprint-newline :fill stream)
-        (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify type)))
+        (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify-if type)))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
@@ -541,7 +551,7 @@ See parse.lisp:826"
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
-  (print "funtype")
+  (print-debug "funtype")
   (let ((cte (currify te)))
     (with-slots (domain range) cte
       (when colon-p (format stream "("))
