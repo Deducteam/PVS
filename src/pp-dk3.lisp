@@ -440,7 +440,7 @@ the declaration of TYPE FROM."
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
-  (with-slots (id declared-type type definition formals) decl
+  (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
         (let* ((formals (alexandria:flatten formals))
@@ -456,12 +456,12 @@ the declaration of TYPE FROM."
         (pprint-logical-block (stream nil)
           (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
           (pprint-indent :block 2 stream)
-          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set declared-type)))
+          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify-if type))))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
-  (with-slots (id declared-type definition formals type) decl
+  (with-slots (id definition formals type) decl
     (let ((formals (alexandria:flatten formals))
           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
@@ -525,12 +525,7 @@ See parse.lisp:826"
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   ;; REVIEW this function might be obsolete since we currify everything
   "[bool, bool]"
-  (print "tupletype")
-  (with-slots (types) te
-    ;; curryfication of tuple types used as function arguments
-    (when colon-p (format stream "("))
-    (format stream "~{~:/pvs:pp-dk/~^ ~~> ~}" types)
-    (when colon-p (format stream ")"))))
+  (error "tupletype can not be used"))
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero}"

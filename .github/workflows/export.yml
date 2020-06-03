@@ -57,6 +57,11 @@ jobs:
       run: |
         ./test-pp-dk.sh -f lib/simple -t simple
         ./test-pp-dk.sh -f lib/simple -t prenex
+        ./test-pp-dk.sh -f lib/simple -t thyparams
+        ./test-pp-dk.sh -f lib/simple -t import
+        ./test-pp-dk.sh -f lib/simple -t vector
+        ./test-pp-dk.sh -f lib/simple -t vector_ops
+        ./test-pp-dk.sh -f lib/simple -t linear_form
         ./test-pp-dk.sh -f lib/prelude -t operator_defs
         ./test-pp-dk.sh -f lib/prelude -t xor_def
         ./test-pp-dk.sh -f lib/prelude -t quantifier_props
