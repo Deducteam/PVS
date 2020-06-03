@@ -66,8 +66,8 @@ are translated to rewriting variables.")
 
 (declaim (type context *ctx-thy*))
 (defparameter *ctx-thy* nil
-  "Contain theory formals. Slightly different from other contexts since they can
-contain (dependent) types.")
+  "Contain theory formals in *reversed* order. All symbols abstract on the
+definitions of this context using `pp-prenex'.")
 
 (declaim (ftype (function (formal-decl) (cons symbol type-expr)) cform->ctxe))
 (defgeneric cform->ctxe (cform)
@@ -84,6 +84,7 @@ contain (dependent) types.")
 
 ;;; Misc functions
 
+;; TODO: rather use currify dom range
 (declaim (ftype (function (type-expr) type-expr) currify))
 (defgeneric currify (te)
   (:documentation "Currifies a function type, [a,b -> c] --> [a -> [b -> c]].
@@ -214,31 +215,69 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
             (format stream "~a (~v/pvs:pp-abstraction/)"
                     quant (list (car bindings)) newex))))))
 
+;; REVIEW rename into `abstract-thy' or something of the kind
 (declaim (ftype (function (stream type-expr * * symbol) null) pp-prenex))
 (defun pp-prenex (stream tex &optional colon-p at-sign-p kind)
   "Print type expression TEX of kind KIND with prenex polymorphism on
 `*ctx-thy*'. KIND can be symbol `kind', `set' or `bool'."
-  (labels ((ppqu (qu ctx)
+  (labels ((pprint-dtype (ctx)
+             "Print the type that is able to accept elements of context CTX as
+dependent argument to yield type TEX."
+             (declare (type context ctx))
+             (if (null ctx)
+                 (pp-dk stream tex t)
+                 (let ((id (caar ctx))
+                       (typ (cdar ctx)))
+                   (with-parens (stream t)
+                     (case kind
+                       ('kind
+                        (format stream "~:/pvs:pp-dk/ *> " typ)
+                        (pprint-dtype (cdr ctx)))
+                       ('set
+                        (format stream "arrd {~/pvs:pp-dk/} " typ)
+                        (with-parens (stream t)
+                          (format stream "λ~/pvs:pp-sym/," id)
+                          (pprint-newline :miser stream)
+                          (pprint-dtype (cdr ctx))))
+                       ('bool
+                        (format stream "∀ {~/pvs:pp-dk/} " typ)
+                        (with-parens (stream t)
+                          (format stream "λ~/pvs:pp-sym/," id)
+                          (pprint-newline :miser stream)
+                          (pprint-dtype (cdr ctx)))))))))
+           (ppqu (qu ctx)
+             "Print quantifier QU and abstract over the variable of car of CTX."
+             (declare (type string qu))
+             (declare (type context ctx))
              (format stream "~a " qu)
              (with-parens (stream t)
                (format stream "λ~/pvs:pp-sym/, " (caar ctx))
                (ppp (cdr ctx))))
            (ppp (ctx)
-             (cond
-               ((equal kind 'kind)
-                (if (null ctx)
-                    (format stream "scheme_k ~:/pvs:pp-dk/" tex)
-                    (ppqu "∀K" ctx)))
-               ((equal kind 'set)
-                (if (null ctx)
-                    (format stream "scheme_s ~:/pvs:pp-dk/" tex)
-                    (ppqu "∀S" ctx)))
-               ((equal kind 'bool)
-                (if (null ctx)
-                    (pp-dk stream tex colon-p at-sign-p)
-                    (ppqu "∀B" ctx))))))
+             "Print quantifier and abstract on car of CTX or abstract on values
+of `*ctx-thy*'."
+             (declare (type context ctx))
+             (if (null ctx)
+                 (let ((scheme (case kind
+                                 ('kind "scheme_k ")
+                                 ('set "scheme_s ")
+                                 ('bool "")))
+                       (ctx-values (remove-if
+                                    #'(lambda (idt) (equal *type* (cdr idt)))
+                                    *ctx-thy*)))
+                   (write-string scheme stream)
+                   (pprint-dtype (reverse ctx-values)))
+                 (let ((quant (case kind
+                                ('kind "∀K")
+                                ('set "∀S")
+                                ('bool "∀B"))))
+                   (ppqu quant ctx)))))
     (with-parens (stream colon-p)
-      (ppp *ctx-thy*))))
+      (let ((ctx-types (remove-if
+                        #'(lambda (idt)
+                            (not (equal *type* (cdr idt))))
+                        *ctx-thy*)))
+        (ppp (reverse ctx-types))))))
 
 (declaim (ftype (function (stream string * *) null) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
@@ -292,6 +331,7 @@ the declaration of TYPE FROM."
                 (pprint-decls stream (cdr decls))))))
        (process-formals (formals theory)
          "Handle formal parameters FORMALS of theory THEORY."
+         ;; FIXME importing must be processed too
          (if (null formals)
              (pprint-decls stream theory)
              (let ((c (car formals)))
@@ -300,16 +340,17 @@ the declaration of TYPE FROM."
                   (let ((*ctx-thy* (acons (id c) *type* *ctx-thy*)))
                     (process-formals (cdr formals) theory)))
                  ((formal-const-decl? c)
-                  (let ((*ctx* (acons (id c) (declared-type c) *ctx*)))
+                  (let ((*ctx-thy* (acons (id c) (declared-type c) *ctx-thy*))
+                        ;; REVIEW adding to *ctx* might be superfluous
+                        (*ctx* (acons (id c) (declared-type c) *ctx*)))
                     (process-formals (cdr formals) theory))))))))
     (declare (ftype (function (stream var-decl list) null) handle-var-decl))
     (declare (ftype (function
                      (stream (or null (cons (or importing declaration) list)))
                      null)
                     pprint-decls))
-    (declare (ftype (function ((plist formal-decl)) null) process-formals))
-    ;; (declare (ftype (function ((or null (cons formal-decl)) list) null)
-    ;;                 process-formals))
+    (declare (ftype (function ((or null (cons formal-decl)) list) null)
+                    process-formals))
     (with-slots (id theory formals-sans-usings) mod
       (format stream "// Theory ~a~%" id)
       (process-formals formals-sans-usings theory))))
@@ -525,7 +566,7 @@ See parse.lisp:826"
          (pp-sym stream id)
          (when (not (null *ctx-thy*))
            ;; Apply theory arguments to symbols of signature
-           (format stream " ~{~/pvs:pp-dk/~^ ~}"
+           (format stream " ~{~:/pvs:pp-dk/~^ ~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
                    (mapcar #'(lambda (st) (mk-name-expr (car st)))
@@ -537,7 +578,7 @@ See parse.lisp:826"
            ;; FIXME it seems that symbols from the prelude have ‘nil’ as
            ;; ‘mod-id’
            (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id)
-           (format stream "~{ ~/pvs:pp-dk/~}" actuals))))))
+           (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
   "LAMBDA (x: T): t"

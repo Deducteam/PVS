@@ -83,3 +83,21 @@ BEGIN
   four: simple.nat
   binnat : prenex[simple.nat, simple.nat].binary
 END import
+
+vector[t: TYPE, n: nat]: THEORY
+BEGIN
+  vect: TYPE
+END vector
+
+vect_ops[t: TYPE]: THEORY
+BEGIN
+  IMPORTING vector
+  nil: vector[t, 0].vect
+  % cons(n: nat, e: t, v: vector[t, n].vect): vector[t, n + 1].vect
+  consc(n:nat)(e:t)(v:vector[t, n].vect): vector[t, n+1].vect
+END vect_ops
+
+linear_form[t: TYPE, n: nat, (IMPORTING vector[t,n]) ker: vector[t,n].vect]: THEORY
+BEGIN
+  form: [vector[t, n].vect -> nat]
+END linear_form
