@@ -23,7 +23,7 @@ the symbols with a module id.")
           (*print-right-margin* 78))
       (format stream "~{~/pvs:pp-reqopen/~&~}"
               '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"
-                "unif_rules"))
+                "unif_rules" "deptype"))
       (pp-dk stream obj))))
 
 (declaim (type type-name *type*))
@@ -51,15 +51,15 @@ printing projection a`1 or a`2.")
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
-  "Context enriched by bindings and `var-decl'. Most recent binding on top.")
+  "Context enriched by bindings and `var-decl'. Most recent binding on top
+(reversed wrt context as declared).")
 
 (declaim (type context *ctx-local*))
 (defparameter *ctx-local* nil
   "Context used to translate rewriting definitions. Variables in this context
 are translated to rewriting variables.")
 
-(declaim (ftype (function ((or null (cons bind-decl))) context)
-                ctx-of-bindings))
+(declaim (ftype (function ((polylist bind-decl)) context) ctx-of-bindings))
 (defun ctx-of-bindings (bindings)
   "Transforms bindings BINDINGS into a context."
   (flet ((f (bd)
@@ -70,7 +70,7 @@ are translated to rewriting variables.")
 
 (declaim (type context *ctx-thy*))
 (defparameter *ctx-thy* nil
-  "Contain theory formals in *reversed* order. All symbols abstract on the
+  "Contain theory formals in *reverse* order. All symbols abstract on the
 definitions of this context using `pp-prenex'.")
 
 (declaim (ftype (function (formal-decl) (cons symbol type-expr)) cform->ctxe))
@@ -183,6 +183,10 @@ necessary."
   (with-parens (stream wrap)
     (pp-dk stream (currify* domain range))))
 
+;; NOTE same as above for ‘dep-domain-tupletype’ representing
+;; [d: [n:nat, ...] -> c(d`1)] and ‘dep-binding’. It seems that the conversion
+;; to the sub-type is not properly handled.
+
 (defmethod pprint-funtype ((domain dep-binding) range stream &optional wrap)
   (print-debug "pprint-funtype dep-binding")
   (with-slots (id declared-type) domain
@@ -219,18 +223,6 @@ binding."
          (pp-abstraction stream range t nil
                          (list (make-bind-decl id declared-type))))))))
 
-(defmethod pprint-funtype ((domain dep-domain-tupletype) range stream
-                           &optional wrap)
-  "[d: [n:nat, t, vect[t, n] -> vect[t, 1+d`1]"
-  (print-debug "pprint-funtype dep-domain-tuple")
-  ;; See classes-decl:909
-  (with-slots (var-bindings type) domain
-    (let* ((db (mapcar #'(lambda (n-p)
-                           (cons (cdr n-p) (id (car n-p)))
-                           var-bindings)))
-           (*dep-bindings* (concatenate 'list db *dep-bindings*)))
-      (pp-dk stream (currify* domain range)))))
-
 (declaim (ftype (function (stream expr * * (or (cons bind-decl) null)) null)
                 pp-abstraction))
 (defun pp-abstraction (stream ex &optional colon-p at-sign-p bindings)
@@ -257,7 +249,7 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
                      (pprint-binding id (cdr (assoc id *ctx*)))
                      (pprint-abstraction term (cdr bindings))))))))
     (declare (ftype (function (symbol type-expr) null) pprint-binding))
-    (declare (ftype (function (expr (or (cons bind-decl) null) null))
+    (declare (ftype (function (expr (polylist bind-decl) null))
                     pprint-abstraction))
     (if (null bindings)
         (pp-dk stream ex colon-p at-sign-p)
@@ -290,33 +282,34 @@ dependent argument to yield type TEX."
              (declare (type context ctx))
              (if (null ctx)
                  (pp-dk stream tex t)
-                 (let ((id (caar ctx))
-                       (typ (cdar ctx)))
+                 (destructuring-bind ((id . typ) &rest tl) ctx
                    (with-parens (stream t)
                      (case kind
                        ('kind
                         (format stream "~:/pvs:pp-dk/ *> " typ)
-                        (pprint-dtype (cdr ctx)))
+                        (pprint-dtype tl))
                        ('set
                         (format stream "arrd {~/pvs:pp-dk/} " typ)
                         (with-parens (stream t)
                           (format stream "λ~/pvs:pp-sym/," id)
                           (pprint-newline :miser stream)
-                          (pprint-dtype (cdr ctx))))
+                          (pprint-dtype tl)))
                        ('bool
                         (format stream "∀ {~/pvs:pp-dk/} " typ)
                         (with-parens (stream t)
                           (format stream "λ~/pvs:pp-sym/," id)
                           (pprint-newline :miser stream)
-                          (pprint-dtype (cdr ctx)))))))))
+                          (pprint-dtype tl))))))))
            (ppqu (qu ctx)
              "Print quantifier QU and abstract over the variable of car of CTX."
              (declare (type string qu))
              (declare (type context ctx))
              (format stream "~a " qu)
              (with-parens (stream t)
-               (format stream "λ~/pvs:pp-sym/, " (caar ctx))
-               (ppp (cdr ctx))))
+               (pprint-logical-block (stream nil)
+                 (format stream "λ~/pvs:pp-sym/, " (caar ctx))
+                 (pprint-newline :fill stream)
+                 (ppp (cdr ctx)))))
            (ppp (ctx)
              "Print quantifier and abstract on car of CTX or abstract on values
 of `*ctx-thy*'."
@@ -328,9 +321,9 @@ of `*ctx-thy*'."
                                  ('bool "")))
                        (ctx-values (remove-if
                                     #'(lambda (idt) (equal *type* (cdr idt)))
-                                    *ctx-thy*)))
+                                    (reverse *ctx-thy*))))
                    (write-string scheme stream)
-                   (pprint-dtype (reverse ctx-values)))
+                   (pprint-dtype ctx-values))
                  (let ((quant (case kind
                                 ('kind "∀K")
                                 ('set "∀S")
@@ -340,8 +333,8 @@ of `*ctx-thy*'."
       (let ((ctx-types (remove-if
                         #'(lambda (idt)
                             (not (equal *type* (cdr idt))))
-                        *ctx-thy*)))
-        (ppp (reverse ctx-types))))))
+                        (reverse *ctx-thy*))))
+        (ppp ctx-types)))))
 
 (declaim (ftype (function (stream string * *) null) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
@@ -445,7 +438,7 @@ the declaration of TYPE FROM."
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
       (let* ((formals (alexandria:flatten formals))
-             (ctx (mapcar #'ctxe->bind-decl *ctx-thy*))
+             (ctx (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
              (bindings (concatenate 'list ctx formals)))
         (pp-abstraction stream type-expr nil nil bindings)))
     (setf *signature* (cons id *signature*))))
@@ -461,7 +454,7 @@ the declaration of TYPE FROM."
       (format stream "ϕ ~v:/pvs:pp-prenex/ ≔ " 'kind *type*)
       (pprint-newline :fill stream)
       (pp-abstraction stream type-value nil nil
-                      (mapcar #'ctxe->bind-decl *ctx-thy*)))
+                      (mapcar #'ctxe->bind-decl (reverse *ctx-thy*))))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -496,7 +489,7 @@ the declaration of TYPE FROM."
     (format stream "// Constant declaration ~a~%" id)
     (if definition
         (let* ((formals (alexandria:flatten formals))
-               (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*))
+               (ctx-thy (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
                (bindings (concatenate 'list ctx-thy formals)))
           (pprint-logical-block (stream nil)
             (format stream "definition ~/pvs:pp-sym/: " id)
@@ -592,7 +585,7 @@ See parse.lisp:826"
   (print "type app")
   (with-slots (type parameters) te
     (when colon-p (format stream "("))
-    (format stream "~<~/pvs:pp-dk/ ~:_~i~{/pvs:pp-dk/~^ ~}~:>"
+    (format stream "~<~/pvs:pp-dk/ ~i~:_~{/pvs:pp-dk/~^ ~}~:>"
             (list type parameters))
     (when colon-p (format stream ")"))))
 
@@ -605,7 +598,8 @@ See parse.lisp:826"
 ;;; Expressions
 
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
-  "Print name NAME applying theory formal parameters if needed."
+  "Print name NAME applying theory formal parameters if needed. Takes care of
+name resolution"
   (print-debug "name")
   (with-slots (id mod-id actuals) ex
     (cond
@@ -615,15 +609,15 @@ See parse.lisp:826"
       ;; should come before the *ctx-thy* case
       ((assoc id *ctx-thy*) (pp-sym stream id))
       ((member id *signature*)
-       (with-parens (stream (not (null *ctx-thy*)))
+       (with-parens (stream (consp *ctx-thy*))
          (pp-sym stream id)
-         (when (not (null *ctx-thy*))
+         (unless (null *ctx-thy*)
            ;; Apply theory arguments to symbols of signature
            (format stream " ~{~:/pvs:pp-dk/~^ ~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
                    (mapcar #'(lambda (st) (mk-name-expr (car st)))
-                           *ctx-thy*)))))
+                           (reverse *ctx-thy*))))))
       ;; Symbol of the encoding
       ((assoc id *dk-sym-map*) (pp-sym stream id))
       ;; Otherwise, it’s a symbol from an imported theory
@@ -657,11 +651,12 @@ See parse.lisp:826"
                (types (reverse (cdr (reverse types))))
                (args (pairlis args types)))
           (with-parens (stream colon-p)
-            (format stream "~/pvs:pp-dk/ ~:_~{~:/pvs:pp-cast/~^ ~:_~}"
-                    op args)))
+            (format stream "~<~/pvs:pp-dk/ ~i~:_~{~:/pvs:pp-cast/~^ ~:_~}~:>"
+                    (list op args))))
         (with-parens (stream colon-p)
           ;; REVIEW currently, application judgement generate such cases
-          (format stream "~/pvs:pp-dk/ ~:_~{~:/pvs:pp-dk/~^ ~:_~}" op args)))))
+          (format stream "~<~/pvs:pp-dk/ ~i~:_~{~:/pvs:pp-dk/~^ ~:_~}~:>"
+                  (list op args))))))
 
 (defmethod pp-dk (stream (ex projection-application)
                   &optional _colon-p _at-sign-p)
@@ -684,8 +679,8 @@ See parse.lisp:826"
          (else (third  args)))
     (when colon-p (format stream "("))
     (format stream "if ~:/pvs:pp-dk/" prop)
-    (format stream " ~:_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) then))
-    (format stream " ~:_~i~<(λ~a, ~/pvs:pp-dk/)~:>" (list (fresh-var) else))
+    (format stream " ~:_~i~<(λ~a, ~:_~/pvs:pp-dk/)~:>" (list (fresh-var) then))
+    (format stream " ~:_~i~<(λ~a, ~:_~/pvs:pp-dk/)~:>" (list (fresh-var) else))
     (when colon-p (format stream ")"))))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
