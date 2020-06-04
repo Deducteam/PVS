@@ -2,12 +2,8 @@
 (require "alexandria")
 (export '(to-dk3))
 
-(defun list-of-type-p (ty l)
-  (flet ((of-type-p (e) (subtypep (type-of e) ty)))
-    (every of-type-p l)))
-
-(deftype plist (ty)
-  '(satisfies list-of-type-p ty))
+(deftype polylist (ty)
+  `(or (cons ,ty list) null))
 
 (defparameter *explicit* nil
   "Set to non-nil avoid using implicits.")
@@ -40,6 +36,14 @@ the symbols with a module id.")
 (declaim (type (or null (cons symbol)) *signature*))
 (defparameter *signature* nil
   "Symbols defined in the theory.")
+
+(declaim (type (polylist (cons (cons fixnum symbol) symbol)) *dep-bindings*))
+(defparameter *dep-bindings* nil
+  "List of residues from currification of dependent bindings. A dependent
+binding of the form [a:[b:t1,c:t2]->d(a`1,a`2)] is currified to
+[b:t1->[c:t2->d(b,c)]]. In this case, this list contains
+(((1 . a) . b) ((2 . a) . c)) which allows to find the adequate variable when
+printing projection a`1 or a`2.")
 
 (deftype context ()
   "A context is an association list mapping symbols to types."
@@ -87,37 +91,18 @@ definitions of this context using `pp-prenex'.")
 (declaim (ftype (function (type-expr type-expr) funtype) currify*))
 (defgeneric currify* (dom ran)
   (:documentation "Currify type DOM into CDOM to yield type
-[CDOM -> RAN]."))
+[CDOM -> RAN].")
+  (:method (domain range) (make-funtype domain range)))
 
 (defmethod currify* ((dom tupletype) ran)
   (labels ((curr (ts acc)
              "Make a funtype of types TS with range ACC."
              (if (consp ts)
-                 (curr (cdr ts) (make-funtype (currify-if (car ts)) acc))
+                 (curr (cdr ts) (currify* (car ts) acc))
                  acc)))
     (curr (reverse (types dom)) ran)))
 
-(defmethod currify* ((dom funtype) ran)
-  (make-funtype (currify* (domain dom) (range dom)) ran))
-
-(defmethod currify* ((dom type-name) ran)
-  (make-funtype dom ran))
-
-(defmethod currify* ((dom subtype) ran)
-  (with-slots (predicate supertype) dom
-    (make-funtype (mk-subtype (currify-if supertype) predicate) ran)))
-
-(declaim (ftype (function (funtype) funtype) currify))
-(defun currify (tex)
-  "Currify function type TEX: transform [a, b -> c] to  [a -> [b -> c]]."
-  (currify* (domain tex) (range tex)))
-
-(declaim (ftype (function (type-expr) type-expr) currify-if))
-(defun currify-if (tex)
-  "Currify TEX if it is a funtype or leave it as it is."
-  (if (funtype? tex) (currify tex) tex))
-
-(declaim (ftype (function (type-expr) (cons type-expr list)) funtype->types))
+(declaim (ftype (function (funtype) (cons type-expr)) funtype->types))
 (defun funtype->types (ex)
   "Extract types of funtion type EX. For instance, ``[a -> b -> c]'' is
 converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
@@ -125,7 +110,8 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
              (if (funtype? ex)
                  (cons (domain ex) (f->t (range ex)))
                  (list ex))))
-    (f->t (currify-if ex))))
+    (with-slots (domain range) ex
+      (f->t (currify* domain range)))))
 
 (declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
@@ -159,6 +145,7 @@ a function name from where the debug is called)."
   (format t "~%~a:" ind)
   (format t "~%  tct:~i~<~a~:>" (list *ctx-thy*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
+  (format t "~%  dbd:~i~<~a~:>" (list *dep-bindings*))
   (format t "~%  lct:~i~<~a~:>" (list *ctx-local*)))
 
 ;;; Specialised printing functions
@@ -176,6 +163,73 @@ necessary."
       (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
             ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
             (t (format stream "{|~(~a~)|}" sym))))))
+
+(declaim (ftype (function (type-expr type-expr stream *) null) pprint-funtype))
+(defgeneric pprint-funtype (domain range stream &optional wrap)
+  (:documentation "Print the function type from DOMAIN to RANGE.")
+  (:method (domain range stream &optional wrap)
+    "Default method"
+    (with-parens (stream wrap)
+      (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
+
+;; NOTE ‘domain-tupletype’ is the type of the domain in expressions like
+;; [[a, b, c] -> d], while ‘tupletype’ is used for [a, b, c -> d].
+;; ‘domain-tupletype’ is a sub-type of ‘tupletype’, we process both the same
+;; way.
+
+(defmethod pprint-funtype ((domain tupletype) range stream &optional wrap)
+  "Currify the tuple type, [a,b,c -> d] as [a -> [b -> [c -> d]]]"
+  (print-debug "pprint-funtype tupletype")
+  (with-parens (stream wrap)
+    (pp-dk stream (currify* domain range))))
+
+(defmethod pprint-funtype ((domain dep-binding) range stream &optional wrap)
+  (print-debug "pprint-funtype dep-binding")
+  (with-slots (id declared-type) domain
+    (if
+     (tupletype? declared-type)
+     ;; If the binding is a tuple type of the form
+     ;; [d:[n:nat,t,vect[t,n] -> RANGE], we discard ‘d’ and add the binding
+     ;; ‘d`1 . n’ to ‘*dep-bindings*’ and call back ‘pprint-funtype’ on the
+     ;; type [n:nat -> [t -> [vect[t,n] -> RANGE]]]. RANGE can contain
+     ;; projections of the form d`1, but they are replaced by method ‘pp-dk’
+     ;; called on ‘projection-application’ instances which looks into
+     ;; ‘*dep-bindings*’.
+     (labels
+         ((vars (index rest)
+            "Enrich `*dep-bindings*' with cons (t`i . x) where t is the top
+binding of DOMAIN, i is INDEX and REST is the tuple type, if car REST is a
+binding."
+            (declare (type fixnum index))
+            (declare (type list rest))
+            (if (consp rest)
+                (destructuring-bind (hd &rest tl) rest
+                  (if (dep-binding? hd)
+                      (let* ((keyproj (cons index id))
+                             (*dep-bindings*
+                               (acons keyproj (id hd) *dep-bindings*)))
+                        (vars (+ 1 index) tl))
+                      (vars (+ 1 index) tl)))
+                (pp-dk stream (currify* declared-type range) wrap))))
+       (vars 1 (types declared-type)))
+     (with-parens (stream wrap)
+       (pprint-logical-block (stream nil)
+         (format stream "arrd ~:_{~/pvs:pp-dk/} " declared-type)
+         (pprint-newline :fill stream)
+         (pp-abstraction stream range t nil
+                         (list (make-bind-decl id declared-type))))))))
+
+(defmethod pprint-funtype ((domain dep-domain-tupletype) range stream
+                           &optional wrap)
+  "[d: [n:nat, t, vect[t, n] -> vect[t, 1+d`1]"
+  (print-debug "pprint-funtype dep-domain-tuple")
+  ;; See classes-decl:909
+  (with-slots (var-bindings type) domain
+    (let* ((db (mapcar #'(lambda (n-p)
+                           (cons (cdr n-p) (id (car n-p)))
+                           var-bindings)))
+           (*dep-bindings* (concatenate 'list db *dep-bindings*)))
+      (pp-dk stream (currify* domain range)))))
 
 (declaim (ftype (function (stream expr * * (or (cons bind-decl) null)) null)
                 pp-abstraction))
@@ -195,9 +249,8 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
              (format stream ", ~:_~/pvs:pp-dk/" term)
              (with-slots (id type declared-type) (car bindings)
                (if declared-type
-                   (let* ((ctyp (currify-if declared-type))
-                          (*ctx* (acons id ctyp *ctx*)))
-                     (pprint-binding id ctyp)
+                   (let* ((*ctx* (acons id declared-type *ctx*)))
+                     (pprint-binding id declared-type)
                      (pprint-abstraction term (cdr bindings)))
                    ;; Otherwise, the variable is already declared
                    (progn
@@ -320,7 +373,7 @@ of the theory REST with the new context in (dynamic) scope."
          (declare (type var-decl vd))
          (declare (type list rest))
          (with-slots (id declared-type) vd
-           (let ((*ctx* (acons id (currify-if declared-type) *ctx*)))
+           (let ((*ctx* (acons id declared-type *ctx*)))
              (pprint-decls rest))))
        (pprint-decls (decls)
          "Print declarations DECLS to stream STREAM. We use a special function
@@ -356,10 +409,9 @@ the declaration of TYPE FROM."
                   (let ((*ctx-thy* (acons (id c) *type* *ctx-thy*)))
                     (process-formals (cdr formals) theory)))
                  ((formal-const-decl? c)
-                  (let* ((cdtype (currify-if (declared-type c)))
-                         (*ctx-thy* (acons (id c) cdtype *ctx-thy*))
+                  (let* ((*ctx-thy* (acons (id c) (declared-type c) *ctx-thy*))
                          ;; REVIEW adding to *ctx* might be superfluous
-                         (*ctx* (acons (id c) cdtype *ctx*)))
+                         (*ctx* (acons (id c) (declared-type c) *ctx*)))
                     (process-formals (cdr formals) theory))))))))
     (with-slots (id theory formals-sans-usings) mod
       (format stream "// Theory ~a~%" id)
@@ -450,13 +502,13 @@ the declaration of TYPE FROM."
             (format stream "definition ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
-            (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set (currify-if type))
+            (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set type)
             (pprint-newline :fill stream)
             (pp-abstraction stream definition nil nil bindings)))
         (pprint-logical-block (stream nil)
           (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
           (pprint-indent :block 2 stream)
-          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify-if type))))
+          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set type)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
@@ -469,7 +521,7 @@ the declaration of TYPE FROM."
         (format stream "symbol ~/pvs:pp-sym/: " id)
         (pprint-indent :block 2 stream)
         (pprint-newline :fill stream)
-        (format stream "χ ~v:/pvs:pp-prenex/~&" 'set (currify-if type)))
+        (format stream "χ ~v:/pvs:pp-prenex/~&" 'set type))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
@@ -547,12 +599,8 @@ See parse.lisp:826"
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
   (print-debug "funtype")
-  (let ((cte (currify te)))
-    (with-slots (domain range) cte
-      (when colon-p (format stream "("))
-      (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range)
-      (when colon-p (format stream ")")))))
-;; TODO: domain dep-binding, possibly a function pp-funtype
+  (with-slots (domain range) te
+    (pprint-funtype domain range stream colon-p)))
 
 ;;; Expressions
 
@@ -602,7 +650,6 @@ See parse.lisp:826"
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
   "f(x)"
   (print-debug "application")
-  (format t "~%~a: ~a" (operator* ex) (type (operator* ex)))
   (let ((op (operator* ex))
         (args (alexandria:flatten (arguments* ex))))
     (if (type op)
@@ -615,6 +662,15 @@ See parse.lisp:826"
         (with-parens (stream colon-p)
           ;; REVIEW currently, application judgement generate such cases
           (format stream "~/pvs:pp-dk/ ~:_~{~:/pvs:pp-dk/~^ ~:_~}" op args)))))
+
+(defmethod pp-dk (stream (ex projection-application)
+                  &optional _colon-p _at-sign-p)
+  "d`1 or PROJ_1(d)"
+  (with-slots (index argument) ex
+    (let ((it (assoc (cons index (id argument)) *dep-bindings* :test #'equalp)))
+      (unless it
+        (error "Projection ~a not found in ~a" ex *dep-bindings*))
+      (pp-sym stream (cdr it)))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
 ;; a context to be available to type expressions.

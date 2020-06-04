@@ -93,7 +93,7 @@ vect_ops[t: TYPE]: THEORY
 BEGIN
   IMPORTING vector
   nil: vector[t, 0].vect
-  % cons(n: nat, e: t, v: vector[t, n].vect): vector[t, n + 1].vect
+  cons(n: nat, e: t, v: vector[t, n].vect): vector[t, n + 1].vect
   consc(n:nat)(e:t)(v:vector[t, n].vect): vector[t, n+1].vect
 END vect_ops
 
