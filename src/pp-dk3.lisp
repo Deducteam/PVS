@@ -73,7 +73,7 @@ are translated to rewriting variables.")
 (declaim (type context *ctx-thy*))
 (defparameter *ctx-thy* nil
   "Contain theory formals. All declared (and defined) symbols must abstract on
-the definitions of this context using `pp-prenex'. For instance, if this
+the definitions of this context using `pprint-prenex'. For instance, if this
 variable contains ((t . TYPE) (n . nat)), then all symbols will start by
 quantifying over a type and a natural. Note that since we implement prenex
 polymorphism, we will always quantify first on types, then on objects.")
@@ -289,8 +289,8 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
                 (pprint-abstraction newex (list (car bindings)) stream))))))))
 
 ;; REVIEW rename into `abstract-thy' or something of the kind
-(declaim (ftype (function (stream type-expr * * symbol) null) pp-prenex))
-(defun pp-prenex (stream tex &optional colon-p at-sign-p kind)
+(declaim (ftype (function (type-expr symbol stream *) null) pprint-prenex))
+(defun pprint-prenex (tex kind stream &optional wrap)
   "Print type expression TEX of kind KIND with prenex polymorphism on
 `*ctx-thy*'. KIND can be symbol `kind', `set' or `bool'."
   (labels ((pprint-dtype (ctx)
@@ -344,7 +344,7 @@ of `*ctx-thy*'."
                 (pprint-dtype ctx-values))
               (let ((quant (case kind ('kind "∀K") ('set "∀S") ('bool "∀B"))))
                 (ppqu quant ctx)))))
-    (with-parens (stream colon-p)
+    (with-parens (stream wrap)
       (ppp (remove-if-not #'(lambda (idt) (equal *type* (cdr idt)))
                           (reverse *ctx-thy*))))))
 
@@ -433,9 +433,10 @@ the declaration of TYPE FROM."
   "t: TYPE."
   (print "type decl")
   (with-slots (id) decl
-    (format stream
-            "~<constant symbol ~/pvs:pp-sym/: ~2i~:_ϕ ~v:/pvs:pp-prenex/~:>~%"
-            (list id 'kind *type*))
+    (pprint-logical-block (stream nil)
+      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_ϕ " id)
+      (pprint-prenex *type* 'kind stream t))
+    (pprint-newline :mandatory stream)
     (setf *signature* (cons id *signature*))
     (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
     (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true" id)))
@@ -445,8 +446,9 @@ the declaration of TYPE FROM."
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
-      (format stream "definition ~/pvs:pp-sym/: ϕ ~v:/pvs:pp-prenex/ ≔ "
-              id 'kind *type*)
+      (format stream "definition ~/pvs:pp-sym/: ϕ " id)
+      (pprint-prenex *type* 'kind stream t)
+      (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
       (let* ((formals (alexandria:flatten formals))
@@ -463,7 +465,9 @@ the declaration of TYPE FROM."
       (format stream "definition ~/pvs:pp-sym/: " id)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
-      (format stream "ϕ ~v:/pvs:pp-prenex/ ≔ " 'kind *type*)
+      (write-string "ϕ " stream)
+      (pprint-prenex *type* 'kind stream t)
+      (write-string " ≔ " stream)
       (pprint-newline :fill stream)
       (pprint-abstraction
        type-value (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)) stream))
@@ -488,7 +492,9 @@ the declaration of TYPE FROM."
           (format stream " ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
-          (format stream "ε ~v:/pvs:pp-prenex/~&" 'bool defn))
+          (write-string "ε " stream)
+          (pprint-prenex defn 'bool stream t))
+        (pprint-newline :mandatory stream)
         (setf *signature* (cons id *signature*))
         (unless axiomp
           (format stream "proof~%")
@@ -507,13 +513,17 @@ the declaration of TYPE FROM."
             (format stream "definition ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
-            (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set type)
+            (write-string "χ " stream)
+            (pprint-prenex type 'set stream t)
+            (write-string " ≔ " stream)
             (pprint-newline :fill stream)
             (pprint-abstraction definition bindings stream)))
         (pprint-logical-block (stream nil)
           (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
           (pprint-indent :block 2 stream)
-          (format stream "χ ~v:/pvs:pp-prenex/~&" 'set type)))
+          (write-string "χ " stream)
+          (pprint-prenex type 'set stream t)
+          (pprint-newline :mandatory stream)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
@@ -526,7 +536,9 @@ the declaration of TYPE FROM."
         (format stream "symbol ~/pvs:pp-sym/: " id)
         (pprint-indent :block 2 stream)
         (pprint-newline :fill stream)
-        (format stream "χ ~v:/pvs:pp-prenex/~&" 'set type))
+        (write-string "χ " stream)
+        (pprint-prenex type 'set stream t)
+        (pprint-newline :mandatory stream))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
