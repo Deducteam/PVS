@@ -1,6 +1,12 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
+;;; TODO reorder actual application to always apply first types (we always
+;;; abstract first on types because we implement prenex polymorphism)
+;;; TODO module resolution and importing
+;;; TODO recursive functions
+;;; TODO product types and record types
+;;; TODO assuming sections
 
 (in-package :pvs)
 (require "alexandria")
@@ -529,8 +535,9 @@ the declaration of TYPE FROM."
             (pprint-newline :fill stream)
             (pprint-abstraction definition bindings stream)))
         (pprint-logical-block (stream nil)
-          (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
+          (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
+          (pprint-newline :fill stream)
           (write-string "χ " stream)
           (pprint-prenex type 'set stream t)))
     (setf *signature* (cons id *signature*))))
