@@ -1,3 +1,7 @@
+;;; Export to Dedukti.
+;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
+;;; Dedukti3 file.
+
 (in-package :pvs)
 (require "alexandria")
 (export '(to-dk3))
@@ -30,13 +34,19 @@ the symbols with a module id.")
 (defparameter *type* (mk-type-name '|type|)
   "Symbol that represents TYPE in PVS which is translated as Set.")
 
-;;; Contexts
-
-;; TODO keep resolutions in context
-
 (declaim (type (polylist symbol) *signature*))
 (defparameter *signature* nil
   "Symbols defined in the theory.")
+
+;;; Contexts
+;;;
+;;; Contexts are  global variables that are  filled during the export.  They are
+;;; filled  using  dynamic  scoping  (that  is  with  (let  ((*ctx*  ...))  ...)
+;;; constructs) so that the variables  introduced are automatically removed when
+;;; we  escape   their  lexical  scope   in  the  PVS  specification   (and  the
+;;; translation). Contexts are always reversed  wrt their definition, that is, a
+;;; PVS context [x: nat, y: reals, z: nznat] is represented as ((z . nznat) (y .
+;;; reals) (x . nat)), the most recent binding is on top (stack structure).
 
 (declaim (type (polylist (cons (cons fixnum symbol) symbol)) *dep-bindings*))
 (defparameter *dep-bindings* nil
@@ -48,17 +58,25 @@ printing projection a`1 or a`2.")
 
 (deftype context ()
   "A context is an association list mapping symbols to types."
-  '(or (cons (cons symbol type-expr) list) null))
+  '(polylist (cons symbol type-expr)))
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
-  "Context enriched by bindings and `var-decl'. Most recent binding on top
-(reversed wrt context as declared).")
+  "Context enriched by LAMBDA bindings and `var-decl'. Variable declarations
+`var-decl' are never removed from the context.")
 
 (declaim (type context *ctx-local*))
 (defparameter *ctx-local* nil
   "Context used to translate rewriting definitions. Variables in this context
 are translated to rewriting variables.")
+
+(declaim (type context *ctx-thy*))
+(defparameter *ctx-thy* nil
+  "Contain theory formals. All declared (and defined) symbols must abstract on
+the definitions of this context using `pp-prenex'. For instance, if this
+variable contains ((t . TYPE) (n . nat)), then all symbols will start by
+quantifying over a type and a natural. Note that since we implement prenex
+polymorphism, we will always quantify first on types, then on objects.")
 
 (declaim (ftype (function ((polylist bind-decl)) context) ctx-of-bindings))
 (defun ctx-of-bindings (bindings)
@@ -68,11 +86,6 @@ are translated to rewriting variables.")
                              (declared-type bd)
                              (type bd)))))
     (mapcar #'f bindings)))
-
-(declaim (type context *ctx-thy*))
-(defparameter *ctx-thy* nil
-  "Contain theory formals in *reverse* order. All symbols abstract on the
-definitions of this context using `pp-prenex'.")
 
 (declaim (ftype (function (formal-decl) (cons symbol type-expr)) cform->ctxe))
 (defgeneric cform->ctxe (cform)
@@ -92,7 +105,7 @@ definitions of this context using `pp-prenex'.")
 (declaim (ftype (function (type-expr type-expr) funtype) currify*))
 (defgeneric currify* (dom ran)
   (:documentation "Currify type DOM into CDOM to yield type
-[CDOM -> RAN].")
+[CDOM -> RAN]. PVS uses a lot of tuple types for functions.")
   (:method (domain range) (make-funtype domain range)))
 
 (defmethod currify* ((dom tupletype) ran)
@@ -134,7 +147,7 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
 
 (defmacro with-binapp-args ((larg rarg binapp) &body body)
   "Binds the left (resp. right) argument of binary application BINAPP to LARG
-(resp.RARG) in body BODY."
+(resp. RARG) in body BODY."
   `(destructuring-bind (,larg ,rarg &rest _) (exprs (argument ,binapp))
      ,@body))
 
@@ -165,9 +178,10 @@ necessary."
 
 (declaim (ftype (function (type-expr type-expr stream *) null) pprint-funtype))
 (defgeneric pprint-funtype (domain range stream &optional wrap)
-  (:documentation "Print the function type from DOMAIN to RANGE.")
+  (:documentation "Print the function type from DOMAIN to RANGE, taking care of
+currification.")
   (:method (domain range stream &optional wrap)
-    "Default method"
+    "Build the function type [DOMAIN -> RANGE]."
     (with-parens (stream wrap)
       (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
 
@@ -203,8 +217,8 @@ necessary."
             "Enrich `*dep-bindings*' with cons (t`i . x) where t is the top
 binding of DOMAIN, i is INDEX and REST is the tuple type, if car REST is a
 binding."
-            (declare (type fixnum index))
-            (declare (type list rest))
+            (declaim (type fixnum index))
+            (declaim (type list rest))
             (if (consp rest)
                 (destructuring-bind (hd &rest tl) rest
                   (if (dep-binding? hd)
@@ -219,12 +233,13 @@ binding."
        (pprint-logical-block (stream nil)
          (format stream "arrd ~:_{~/pvs:pp-dk/} " declared-type)
          (pprint-newline :fill stream)
-         (pp-abstraction stream range t nil
-                         (list (make-bind-decl id declared-type))))))))
+         (pprint-abstraction range
+                             (list (make-bind-decl id declared-type))
+                             stream t))))))
 
-(declaim (ftype (function (stream expr * * (or (cons bind-decl) null)) null)
-                pp-abstraction))
-(defun pp-abstraction (stream ex &optional colon-p at-sign-p bindings)
+(declaim (ftype (function (expr (polylist bind-decl) stream *) null)
+                pprint-abstraction))
+(defun pprint-abstraction (ex bindings stream &optional wrap)
   "Print expression EX on stream STREAM abstracting arguments in BINDINGS (with
 a λ). Note that the context `*ctx*' is enriched on each printed binding. The
 binding is automatically removed from the context thanks to dynamic scoping."
@@ -233,7 +248,7 @@ binding is automatically removed from the context thanks to dynamic scoping."
          (let ((dec (if (equal dtype *type*) "θ" "η")))
            (format stream "~<(~/pvs:pp-sym/: ~:_~a ~:/pvs:pp-dk/)~:>"
                    (list id dec dtype))))
-       (pprint-abstraction (term bindings)
+       (pprint-abstraction* (term bindings)
          "Print term TERM abstracting on bindings BINDINGS. Bindings are
 typed if they were typed in PVS (they may be typed by a variable declaration)."
          (if (null bindings)
@@ -242,20 +257,20 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
                (if declared-type
                    (let* ((*ctx* (acons id declared-type *ctx*)))
                      (pprint-binding id declared-type)
-                     (pprint-abstraction term (cdr bindings)))
+                     (pprint-abstraction* term (cdr bindings)))
                    ;; Otherwise, the variable is already declared
                    (progn
                      (pprint-binding id (cdr (assoc id *ctx*)))
-                     (pprint-abstraction term (cdr bindings))))))))
-    (declare (ftype (function (symbol type-expr) null) pprint-binding))
-    (declare (ftype (function (expr (polylist bind-decl) null))
-                    pprint-abstraction))
+                     (pprint-abstraction* term (cdr bindings))))))))
+    (declaim (ftype (function (symbol type-expr) null) pprint-binding))
+    (declaim (ftype (function (expr (polylist bind-decl) null))
+                    pprint-abstraction*))
     (if (null bindings)
-        (pp-dk stream ex colon-p at-sign-p)
-        (with-parens (stream colon-p)
+        (pp-dk stream ex wrap)
+        (with-parens (stream wrap)
           (pprint-logical-block (stream nil)
             (write-string "λ" stream)
-            (pprint-abstraction ex bindings))))))
+            (pprint-abstraction* ex bindings))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
@@ -267,8 +282,11 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
         (let* ((newex (copy expr)))
           (setf (slot-value newex 'bindings) (cdr bindings))
           (with-parens (stream colon-p)
-            (format stream "~a (~v/pvs:pp-abstraction/)"
-                    quant (list (car bindings)) newex))))))
+            (pprint-logical-block (stream nil)
+              (write-string quant stream)
+              (write-char #\Space stream)
+              (with-parens (stream t)
+                (pprint-abstraction newex (list (car bindings)) stream))))))))
 
 ;; REVIEW rename into `abstract-thy' or something of the kind
 (declaim (ftype (function (stream type-expr * * symbol) null) pp-prenex))
@@ -278,7 +296,7 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
   (labels ((pprint-dtype (ctx)
              "Print the type that is able to accept elements of context CTX as
 dependent argument to yield type TEX."
-             (declare (type context ctx))
+             (declaim (type context ctx))
              (if (null ctx)
                  (pp-dk stream tex t)
                  (destructuring-bind ((id . typ) &rest tl) ctx
@@ -301,8 +319,8 @@ dependent argument to yield type TEX."
                           (pprint-dtype tl))))))))
            (ppqu (qu ctx)
              "Print quantifier QU and abstract over the variable of car of CTX."
-             (declare (type string qu))
-             (declare (type context ctx))
+             (declaim (type string qu))
+             (declaim (type context ctx))
              (format stream "~a " qu)
              (with-parens (stream t)
                (pprint-logical-block (stream nil)
@@ -312,7 +330,7 @@ dependent argument to yield type TEX."
            (ppp (ctx)
              "Print quantifier and abstract on car of CTX or abstract on values
 of `*ctx-thy*'."
-             (declare (type context ctx))
+             (declaim (type context ctx))
              (if
               (null ctx)
               (let ((scheme (case kind
@@ -357,8 +375,8 @@ arguments should be wrapped into parentheses."))
       ((handle-var-decl (stream vd rest)
          "Add dynamically variable declaration VD to `*ctx*' and print the rest
 of the theory REST with the new context in (dynamic) scope."
-         (declare (type var-decl vd))
-         (declare (type list rest))
+         (declaim (type var-decl vd))
+         (declaim (type list rest))
          (with-slots (id declared-type) vd
            (let ((*ctx* (acons id declared-type *ctx*)))
              (pprint-decls rest))))
@@ -366,7 +384,7 @@ of the theory REST with the new context in (dynamic) scope."
          "Print declarations DECLS to stream STREAM. We use a special function
 (rather than a `map') because PVS places the declaration of predicates *after*
 the declaration of TYPE FROM."
-         (declare (type (or null (cons (or importing declaration))) decls))
+         (declaim (type (polylist (or importing declaration)) decls))
          (when (not (null decls))
            (cond
              ((var-decl? (car decls))
@@ -385,8 +403,8 @@ the declaration of TYPE FROM."
                 (pprint-decls (cdr decls))))))
        (process-formals (formals theory)
          "Handle formal parameters FORMALS of theory THEORY."
-         (declare (type (or null (cons formal-decl)) formals))
-         (declare (type list theory))
+         (declaim (type (polylist formal-decl) formals))
+         (declaim (type list theory))
          ;; FIXME importing must be processed too
          (if (null formals)
              (pprint-decls theory)
@@ -434,7 +452,7 @@ the declaration of TYPE FROM."
       (let* ((formals (alexandria:flatten formals))
              (ctx (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
              (bindings (concatenate 'list ctx formals)))
-        (pp-abstraction stream type-expr nil nil bindings)))
+        (pprint-abstraction type-expr bindings stream)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
@@ -447,8 +465,8 @@ the declaration of TYPE FROM."
       (pprint-newline :fill stream)
       (format stream "ϕ ~v:/pvs:pp-prenex/ ≔ " 'kind *type*)
       (pprint-newline :fill stream)
-      (pp-abstraction stream type-value nil nil
-                      (mapcar #'ctxe->bind-decl (reverse *ctx-thy*))))
+      (pprint-abstraction
+       type-value (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)) stream))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -462,7 +480,7 @@ the declaration of TYPE FROM."
                                    (ctxe->bind-decl (assoc id *ctx*)))
                                free-ids)))
                (make!-forall-expr bindings ex))))
-      (declare (ftype (function (expr) forall-expr) univ-closure))
+      (declaim (ftype (function (expr) forall-expr) univ-closure))
       (let ((defn (univ-closure definition))
             (axiomp (member spelling '(AXIOM POSTULATE))))
         (pprint-logical-block (stream nil)
@@ -491,7 +509,7 @@ the declaration of TYPE FROM."
             (pprint-newline :fill stream)
             (format stream "χ ~v:/pvs:pp-prenex/ ≔ " 'set type)
             (pprint-newline :fill stream)
-            (pp-abstraction stream definition nil nil bindings)))
+            (pprint-abstraction definition bindings stream)))
         (pprint-logical-block (stream nil)
           (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
           (pprint-indent :block 2 stream)
@@ -621,13 +639,11 @@ name resolution"
            (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id)
            (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))
 
-(defmethod pp-dk (stream (ex lambda-expr) &optional colon-p at-sign-p)
+(defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t"
   (print "lambda-expr")
   (with-slots (bindings expression) ex
-    (when colon-p (format stream "("))
-    (pp-abstraction stream expression nil nil bindings)
-    (when colon-p (format stream ")"))))
+    (pprint-abstraction expression bindings stream t)))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∃"))
