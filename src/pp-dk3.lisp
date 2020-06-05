@@ -27,13 +27,14 @@ the symbols with a module id.")
       (pp-dk stream obj))))
 
 (declaim (type type-name *type*))
-(defparameter *type* (mk-type-name '|type|))
+(defparameter *type* (mk-type-name '|type|)
+  "Symbol that represents TYPE in PVS which is translated as Set.")
 
 ;;; Contexts
 
 ;; TODO keep resolutions in context
 
-(declaim (type (or null (cons symbol)) *signature*))
+(declaim (type (polylist symbol) *signature*))
 (defparameter *signature* nil
   "Symbols defined in the theory.")
 
@@ -134,10 +135,8 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
 (defmacro with-binapp-args ((larg rarg binapp) &body body)
   "Binds the left (resp. right) argument of binary application BINAPP to LARG
 (resp.RARG) in body BODY."
-  (let ((args `(exprs (argument ,binapp))))
-    `(let* ((,larg (car ,args))
-            (,rarg (cadr ,args)))
-       ,@body)))
+  `(destructuring-bind (,larg ,rarg &rest _) (exprs (argument ,binapp))
+     ,@body))
 
 (defun print-debug (ind)
   "Prints debug information on standard output with IND an indication (typically
@@ -314,27 +313,22 @@ dependent argument to yield type TEX."
              "Print quantifier and abstract on car of CTX or abstract on values
 of `*ctx-thy*'."
              (declare (type context ctx))
-             (if (null ctx)
-                 (let ((scheme (case kind
-                                 ('kind "scheme_k ")
-                                 ('set "scheme_s ")
-                                 ('bool "")))
-                       (ctx-values (remove-if
-                                    #'(lambda (idt) (equal *type* (cdr idt)))
-                                    (reverse *ctx-thy*))))
-                   (write-string scheme stream)
-                   (pprint-dtype ctx-values))
-                 (let ((quant (case kind
-                                ('kind "∀K")
-                                ('set "∀S")
-                                ('bool "∀B"))))
-                   (ppqu quant ctx)))))
+             (if
+              (null ctx)
+              (let ((scheme (case kind
+                              ('kind "scheme_k ")
+                              ('set "scheme_s ")
+                              ('bool "")))
+                    (ctx-values (remove-if
+                                 #'(lambda (idt) (equal *type* (cdr idt)))
+                                 (reverse *ctx-thy*))))
+                (write-string scheme stream)
+                (pprint-dtype ctx-values))
+              (let ((quant (case kind ('kind "∀K") ('set "∀S") ('bool "∀B"))))
+                (ppqu quant ctx)))))
     (with-parens (stream colon-p)
-      (let ((ctx-types (remove-if
-                        #'(lambda (idt)
-                            (not (equal *type* (cdr idt))))
-                        (reverse *ctx-thy*))))
-        (ppp ctx-types)))))
+      (ppp (remove-if-not #'(lambda (idt) (equal *type* (cdr idt)))
+                          (reverse *ctx-thy*))))))
 
 (declaim (ftype (function (stream string * *) null) pp-reqopen))
 (defun pp-reqopen (stream mod &optional colon-p at-sign-p)
@@ -673,90 +667,91 @@ name resolution"
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
   (print-debug "branch")
-  (let* ((args (exprs (argument ex)))
-         (prop (first  args))
-         (then (second args))
-         (else (third  args)))
-    (when colon-p (format stream "("))
-    (format stream "if ~:/pvs:pp-dk/" prop)
-    (format stream " ~:_~i~<(λ~a, ~:_~/pvs:pp-dk/)~:>" (list (fresh-var) then))
-    (format stream " ~:_~i~<(λ~a, ~:_~/pvs:pp-dk/)~:>" (list (fresh-var) else))
-    (when colon-p (format stream ")"))))
+  (destructuring-bind (prop then else) (exprs (argument ex))
+    (with-parens (stream colon-p)
+      (pprint-logical-block (stream nil)
+        (format stream "if ~:/pvs:pp-dk/ ~2i~:_" prop)
+        (format stream "~<(λ~a, ~1i~:_~/pvs:pp-dk/)~:>"
+                (list (fresh-var) then))
+        (write-char #\Space stream)
+        (format stream "~<(λ~a, ~1i~:_~/pvs:pp-dk/)~:>"
+                (list (fresh-var) else))))))
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
   (print "disequation")
   (with-parens (stream colon-p)
-    (format stream "neq ~:_~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
+    (format stream "~<neq ~i~:_~{~:/pvs:pp-dk/~^ ~:_~}~:>" (argument ex))))
 
 (defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
   "a /= b"
   (print "infix-disequation")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ≠ ~:/pvs:pp-dk/" argl argr))))
+      (format stream "~<~:/pvs:pp-dk/ ≠ ~i~:_~:/pvs:pp-dk/~:>"
+              (list argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
   (print "equation")
   (with-parens (stream colon-p)
-    (format stream "eq ~{~:/pvs:pp-dk/~^ ~}" (exprs (argument ex)))))
+    (format stream "~<eq ~i~{~:/pvs:pp-dk/~^ ~:_~}~:>" (argument ex))))
 
 (defmethod pp-dk (stream (ex infix-equation) &optional colon-p at-sign-p)
   "a = b"
   (print "infix-equation")
-  ;; argument is a tuple-expr
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ = ~:/pvs:pp-dk/" argl argr))))
+      (format stream "~<~:/pvs:pp-dk/ = ~i~:_~:/pvs:pp-dk/~:>"
+              (list argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
   (print "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "and ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format stream "~<and ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)~:>"
+              (list argl (fresh-var) argr)))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
   "A AND B"
   (print "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∧ (λ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format stream "~<~:/pvs:pp-dk/ ∧ ~i~:_(λ~a, ~/pvs:pp-dk/)~:>"
+              (list argl (fresh-var) argr)))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
   "OR(A, B)"
   (print "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "or ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format stream "~<or ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)~:>"
+              (list argl (fresh-var) argr)))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
   "A OR B"
   (print "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∨ (λ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format stream "~<~:/pvs:pp-dk/ ∨ ~i~:_(λ~a, ~/pvs:pp-dk/)~:>"
+              (list argl (fresh-var) argr)))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
   (print "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "imp ~:/pvs:pp-dk/ (λ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format stream "~<imp ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)~:>"
+              (list argl (fresh-var) argr)))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
   "A IMPLIES B"
   (print "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ⊃ (λ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format stream "~<~:/pvs:pp-dk/ ⊃ ~i~:_(λ~a, ~/pvs:pp-dk/)~:>"
+              (list argl (fresh-var) argr)))))
 
 (defmethod pp-dk (stream (ex negation) &optional colon-p _at-sign-p)
   "NOT(A), there is also a `unary-negation' that represents NOT A."
@@ -777,7 +772,8 @@ name resolution"
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
   (with-parens (stream colon-p)
     (with-slots (type number) ex
-      (format stream "cast {_} {~/pvs:pp-dk/} _ ~d _" type number))))
+      (format stream "~<cast ~i~:_~:/pvs:pp-dk/ ~:__ ~d _~:>"
+              (list type number)))))
 
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
