@@ -394,12 +394,14 @@ the declaration of TYPE FROM."
               ;; after the type declaration
               (assert (>= (length decls) 2))
               (pp-dk stream (second decls))
-              (format stream "~%")
+              (fresh-line stream)
               (pp-dk stream (first decls))
-              (format stream "~%~%")
+              (fresh-line stream)
+              (terpri stream)
               (pprint-decls (cddr decls)))
              (t (pp-dk stream (car decls))
-                (format stream "~%~%")
+                (fresh-line stream)
+                (terpri stream)
                 (pprint-decls (cdr decls))))))
        (process-formals (formals theory)
          "Handle formal parameters FORMALS of theory THEORY."
@@ -436,7 +438,7 @@ the declaration of TYPE FROM."
     (pprint-logical-block (stream nil)
       (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_ϕ " id)
       (pprint-prenex *type* 'kind stream t))
-    (pprint-newline :mandatory stream)
+    (fresh-line stream)
     (setf *signature* (cons id *signature*))
     (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
     (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true" id)))
@@ -494,12 +496,12 @@ the declaration of TYPE FROM."
           (pprint-newline :fill stream)
           (write-string "ε " stream)
           (pprint-prenex defn 'bool stream t))
-        (pprint-newline :mandatory stream)
+        (fresh-line stream)
         (setf *signature* (cons id *signature*))
         (unless axiomp
           (format stream "proof~%")
           ;; TODO: export proof
-          (format stream "abort~%"))))))
+          (format stream "abort"))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print "const-decl")
@@ -522,8 +524,7 @@ the declaration of TYPE FROM."
           (format stream "symbol ~/pvs:pp-sym/: ~:_" id)
           (pprint-indent :block 2 stream)
           (write-string "χ " stream)
-          (pprint-prenex type 'set stream t)
-          (pprint-newline :mandatory stream)))
+          (pprint-prenex type 'set stream t)))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
