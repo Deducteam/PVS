@@ -101,3 +101,8 @@ linear_form[t: TYPE, n: nat, (IMPORTING vector[t,n]) ker: vector[t,n].vect]: THE
 BEGIN
   form: [vector[t, n].vect -> nat]
 END linear_form
+
+tfrom[t: TYPE, u: TYPE FROM t]: THEORY
+BEGIN
+  value: u
+END tfrom

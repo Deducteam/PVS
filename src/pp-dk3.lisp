@@ -78,6 +78,12 @@ variable contains ((t . TYPE) (n . nat)), then all symbols will start by
 quantifying over a type and a natural. Note that since we implement prenex
 polymorphism, we will always quantify first on types, then on objects.")
 
+(declaim (type (polylist (cons symbol symbol)) *ctx-thy-subtypes*))
+(defparameter *ctx-thy-subtypes* nil
+  "For each u TYPE FROM t present in the theory formals, a cons cell
+(u . u_pred) is added to this context. When u is required, it will be printed as
+psub u_pred.")
+
 (declaim (ftype (function ((polylist bind-decl)) context) ctx-of-bindings))
 (defun ctx-of-bindings (bindings)
   "Transforms bindings BINDINGS into a context."
@@ -86,14 +92,6 @@ polymorphism, we will always quantify first on types, then on objects.")
                              (declared-type bd)
                              (type bd)))))
     (mapcar #'f bindings)))
-
-(declaim (ftype (function (formal-decl) (cons symbol type-expr)) cform->ctxe))
-(defgeneric cform->ctxe (cform)
-  (:documentation "Convert a theory formal CFORM to a context element."))
-
-(defmethod cform->ctxe ((cform formal-type-decl))
-  "Transform type declaration in `(t . TYPE)'"
-  (cons (id cform) *type*))
 
 (declaim (ftype (function (cons symbol type-expr) bind-decl) ctxe->bind-decl))
 (defun ctxe->bind-decl (e)
@@ -156,6 +154,7 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
 a function name from where the debug is called)."
   (format t "~%~a:" ind)
   (format t "~%  tct:~i~<~a~:>" (list *ctx-thy*))
+  (format t "~%  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
   (format t "~%  dbd:~i~<~a~:>" (list *dep-bindings*))
   (format t "~%  lct:~i~<~a~:>" (list *ctx-local*)))
@@ -408,18 +407,27 @@ the declaration of TYPE FROM."
          (declaim (type (polylist formal-decl) formals))
          (declaim (type list theory))
          ;; FIXME importing must be processed too
-         (if (null formals)
-             (pprint-decls theory)
-             (let ((c (car formals)))
-               (cond
-                 ((formal-type-decl? c)
-                  (let ((*ctx-thy* (acons (id c) *type* *ctx-thy*)))
-                    (process-formals (cdr formals) theory)))
-                 ((formal-const-decl? c)
-                  (let* ((*ctx-thy* (acons (id c) (declared-type c) *ctx-thy*))
-                         ;; REVIEW adding to *ctx* might be superfluous
-                         (*ctx* (acons (id c) (declared-type c) *ctx*)))
-                    (process-formals (cdr formals) theory))))))))
+         (if
+          (null formals)
+          (pprint-decls theory)
+          (destructuring-bind (hd &rest tl) formals
+            (cond
+              ((formal-subtype-decl? hd)
+               ;; Retrieve the name of the subtype
+               (let* ((pred (predicate (type-value hd)))
+                      (*ctx-thy-subtypes*
+                        (acons (id hd) (id pred) *ctx-thy-subtypes*))
+                      (*ctx-thy* (acons (id pred) (type pred) *ctx-thy*)))
+                 (process-formals tl theory)))
+              ((formal-type-decl? hd)
+               (let ((*ctx-thy* (acons (id hd) *type* *ctx-thy*)))
+                 (process-formals tl theory)))
+              ((formal-const-decl? hd)
+               (let* ((*ctx-thy* (acons (id hd) (declared-type hd)
+                                        *ctx-thy*))
+                      ;; REVIEW adding to *ctx* might be superfluous
+                      (*ctx* (acons (id hd) (declared-type hd) *ctx*)))
+                 (process-formals tl theory))))))))
     (with-slots (id theory formals-sans-usings) mod
       (format stream "// Theory ~a~%" id)
       (process-formals formals-sans-usings theory))))
@@ -643,6 +651,11 @@ name resolution"
                    ;; ‘ctx-local’
                    (mapcar #'(lambda (st) (mk-name-expr (car st)))
                            (reverse *ctx-thy*))))))
+      ;; The symbol is a type declared as TYPE FROM in theory parameters,
+      ;; we print it as a predicate sub-type
+      ((assoc id *ctx-thy-subtypes*)
+       (format stream "(psub ~/pvs:pp-sym/)"
+               (cdr (assoc id *ctx-thy-subtypes*))))
       ;; Symbol of the encoding
       ((assoc id *dk-sym-map*) (pp-sym stream id))
       ;; Otherwise, it’s a symbol from an imported theory
