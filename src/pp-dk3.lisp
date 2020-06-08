@@ -38,7 +38,7 @@ the symbols with a module id.")
 (defparameter *type* (mk-type-name '|type|)
   "Symbol that represents TYPE in PVS which is translated as Set.")
 
-(declaim (ftype (function (type-expr) bool) is-type-p))
+(declaim (ftype (function (type-expr) boolean) is-*type*-p))
 (defun is-*type*-p (tex)
   "Return true if TEX is the constant TYPE"
   (equal tex *type*))
@@ -656,11 +656,12 @@ name resolution"
            (format stream " ~{~:/pvs:pp-dk/~^ ~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
-                   (let* ((ctx-thy (reverse *ctx-thy*))
-                          (thy-types (remove-if-not #'is-type-p ctx-thy))
-                          (thy-val   (remove-if #'is-type-p ctx-thy)))
-                     (mapcar #'(lambda (st) (mk-name-expr (car st)))
-                             (concatenate 'list thy-types thy-val)))))))
+                   (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
+                     (let* ((ctx-thy (reverse *ctx-thy*))
+                            (thy-types (remove-if-not #'cdr-*type*-p ctx-thy))
+                            (thy-val   (remove-if #'cdr-*type*-p ctx-thy)))
+                       (mapcar #'(lambda (st) (mk-name-expr (car st)))
+                               (concatenate 'list thy-types thy-val))))))))
       ((assoc id *ctx-thy*) (pp-sym stream id))
       ;; The symbol is a type declared as TYPE FROM in theory parameters,
       ;; we print it as a predicate sub-type
@@ -831,4 +832,12 @@ name resolution"
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
   (print-debug "actual")
-  (pp-dk stream (expr ac) colon-p at-sign-p))
+  (if (tupletype? (expr ac))
+      ;; Tuple types can happen, for instance with pred[[T,T]]
+      ;; these tuple types can only happen in actuals since we currify
+      ;; everything and it’s the only place where types can be given as
+      ;; arguments
+      (dolist (ty (types (expr ac)))
+        (write-char #\space stream)
+        (pp-dk stream ty t at-sign-p))
+      (pp-dk stream (expr ac) accolon-p at-sign-p)))
