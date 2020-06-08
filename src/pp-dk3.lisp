@@ -1,8 +1,6 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
-;;; TODO reorder actual application to always apply first types (we always
-;;; abstract first on types because we implement prenex polymorphism)
 ;;; TODO module resolution and importing
 ;;; TODO recursive functions
 ;;; TODO product types and record types
@@ -39,6 +37,11 @@ the symbols with a module id.")
 (declaim (type type-name *type*))
 (defparameter *type* (mk-type-name '|type|)
   "Symbol that represents TYPE in PVS which is translated as Set.")
+
+(declaim (ftype (function (type-expr) bool) is-type-p))
+(defun is-*type*-p (tex)
+  "Return true if TEX is the constant TYPE"
+  (equal tex *type*))
 
 (declaim (type (polylist symbol) *signature*))
 (defparameter *signature* nil
@@ -250,7 +253,7 @@ a λ). Note that the context `*ctx*' is enriched on each printed binding. The
 binding is automatically removed from the context thanks to dynamic scoping."
   (labels
       ((pprint-binding (id dtype)
-         (let ((dec (if (equal dtype *type*) "θ" "η")))
+         (let ((dec (if (is-*type*-p dtype) "θ" "η")))
            (format stream "~<(~/pvs:pp-sym/: ~:_~a ~:/pvs:pp-dk/)~:>"
                    (list id dec dtype))))
        (pprint-abstraction* (term bindings)
@@ -343,14 +346,14 @@ of `*ctx-thy*'."
                               ('set "scheme_s ")
                               ('bool "")))
                     (ctx-values (remove-if
-                                 #'(lambda (idt) (equal *type* (cdr idt)))
+                                 #'(lambda (idt) (is-*type*-p (cdr idt)))
                                  (reverse *ctx-thy*))))
                 (write-string scheme stream)
                 (pprint-dtype ctx-values))
               (let ((quant (case kind ('kind "∀K") ('set "∀S") ('bool "∀B"))))
                 (ppqu quant ctx)))))
     (with-parens (stream wrap)
-      (ppp (remove-if-not #'(lambda (idt) (equal *type* (cdr idt)))
+      (ppp (remove-if-not #'(lambda (idt) (is-*type*-p (cdr idt)))
                           (reverse *ctx-thy*))))))
 
 (declaim (ftype (function (stream string * *) null) pp-reqopen))
@@ -645,9 +648,6 @@ name resolution"
     (cond
       ((assoc id *ctx*) (pp-sym stream id))
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
-      ;; REVIEW do symbols shadow theory parameters? If so, the *signature* case
-      ;; should come before the *ctx-thy* case
-      ((assoc id *ctx-thy*) (pp-sym stream id))
       ((member id *signature*)
        (with-parens (stream (consp *ctx-thy*))
          (pp-sym stream id)
@@ -656,8 +656,12 @@ name resolution"
            (format stream " ~{~:/pvs:pp-dk/~^ ~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
-                   (mapcar #'(lambda (st) (mk-name-expr (car st)))
-                           (reverse *ctx-thy*))))))
+                   (let* ((ctx-thy (reverse *ctx-thy*))
+                          (thy-types (remove-if-not #'is-type-p ctx-thy))
+                          (thy-val   (remove-if #'is-type-p ctx-thy)))
+                     (mapcar #'(lambda (st) (mk-name-expr (car st)))
+                             (concatenate 'list thy-types thy-val)))))))
+      ((assoc id *ctx-thy*) (pp-sym stream id))
       ;; The symbol is a type declared as TYPE FROM in theory parameters,
       ;; we print it as a predicate sub-type
       ((assoc id *ctx-thy-subtypes*)

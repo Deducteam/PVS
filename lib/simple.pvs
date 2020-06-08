@@ -75,6 +75,15 @@ thyparams[d: TYPE, e: d]: THEORY BEGIN
   id : AXIOM op(x,e) = x
 END thyparams
 
+mixedup[d: TYPE, n: nat, r: TYPE]: THEORY BEGIN
+  avalue: [d -> r]
+END mixedup
+
+usemixedup: THEORY BEGIN
+  IMPORTING mixedup
+  theotherval: [nat -> nat] = mixedup[nat,3,nat].avalue
+END usemixedup
+
 import: THEORY
 BEGIN
   IMPORTING simple
@@ -105,4 +114,4 @@ END linear_form
 tfrom[t: TYPE, u: TYPE FROM t]: THEORY
 BEGIN
   value: u
-END tfrom
+END tfrom 
