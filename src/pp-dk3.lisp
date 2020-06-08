@@ -577,6 +577,15 @@ the declaration of TYPE FROM."
             (*ctx* nil))
         (pp-dk stream definition colon-p at-sign-p)))))
 
+(defmethod pp-dk (stream (decl conversion-decl) &optional colon-p at-sign-p)
+  "CONVERSION elt, there are conversion(plus|minus)-decl as well."
+  (with-slots (id) decl
+    (format stream "// Conversion: ~/pvs:pp-sym/" id)))
+
+(defmethod pp-dk (stream (decl auto-rewrite-decl) &optional colon-p at-sign-p)
+  "AUTO_REWRITE, there are auto-rewrite-(plus|minus)-decl as well."
+  (format stream "// Auto rewrite ~/pvs:pp-sym/" (id decl)))
+
 ;; TODO
 (defmethod pp-dk (stream (decl application-judgement)
                   &optional colon-p at-sign-p)
