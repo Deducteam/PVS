@@ -125,21 +125,12 @@ psub u_pred.")
                  acc)))
     (curr (reverse (types dom)) ran)))
 
-(declaim (ftype (function (funtype) (cons type-expr)) funtype->types))
-(defun funtype->types (ex)
-  "Extract types of funtion type EX. For instance, ``[a -> b -> c]'' is
-converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
-  (labels ((f->t (ex)
-             (if (funtype? ex)
-                 (cons (domain ex) (f->t (range ex)))
-                 (list ex))))
-    (with-slots (domain range) ex
-      (f->t (currify* domain range)))))
-
 (declaim (ftype (function (expr) type-expr) type-of-expr))
 (defgeneric type-of-expr (ex)
   (:documentation "Get the type attributed to expression EX by PVS.")
   (:method ((ex name-expr)) (type (car (resolutions ex))))
+  (:method ((ex bind-decl)) (type ex))
+  (:method ((ex expr-as-type)) (expr ex))
   (:method (ex) (type ex)))
 
 (declaim (type (integer) *var-count*))
