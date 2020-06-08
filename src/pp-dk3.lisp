@@ -1,6 +1,7 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
+;;; TODO some definitions seem to be unfolded every time (type definitions)
 ;;; TODO non dependent product type with elements of type TYPE and equivalence
 ;;; between [[t1, ..., tn] -> r] and [t1 -> [t2 -> ... [tn -> r] ... ]]
 ;;; TODO module resolution and importing
@@ -722,6 +723,7 @@ name resolution"
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
         (pp-dk stream op)
+        (write-char #\space stream)
         (pprint-indent :block 0 stream)
         (pprint-newline :fill stream)
         (format stream "~{~:/pvs:pp-cast/~^ ~:_~}"
