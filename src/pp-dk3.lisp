@@ -1,6 +1,8 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
+;;; TODO non dependent product type with elements of type TYPE and equivalence
+;;; between [[t1, ..., tn] -> r] and [t1 -> [t2 -> ... [tn -> r] ... ]]
 ;;; TODO module resolution and importing
 ;;; TODO recursive functions
 ;;; TODO product types and record types
@@ -133,6 +135,12 @@ converted to list `(a b c)' (a `list' is returned, that is, ended by `nil')."
                  (list ex))))
     (with-slots (domain range) ex
       (f->t (currify* domain range)))))
+
+(declaim (ftype (function (expr) type-expr) type-of-expr))
+(defgeneric type-of-expr (ex)
+  (:documentation "Get the type attributed to expression EX by PVS.")
+  (:method ((ex name-expr)) (type (car (resolutions ex))))
+  (:method (ex) (type ex)))
 
 (declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
@@ -599,6 +607,12 @@ See parse.lisp:826"
       (format stream "//   free-param = ...~&")
       (format stream "//   P = ~/pvs:pp-sym/ freeparams" id))))
 
+(defmethod pp-dk (stream (decl subtype-judgement) &optional colon-p _at-sign-p)
+  (with-slots (id declared-subtype subtype) decl
+    (format stream "// Subtype judgment,~%")
+    (format stream "// ~/pvs:pp-sym/: ~/pvs:pp-dk/ has type ~/pvs:pp-dk/"
+            id subtype declared-subtype)))
+
 (defmethod pp-dk :after
     (stream (decl existence-tcc) &optional colon-p at-sign-p)
   ;; Only add a comment after the formula
@@ -616,12 +630,23 @@ See parse.lisp:826"
   (error "tupletype can not be used"))
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
-  "{n: nat | n /= zero}"
-  (print "subtype")
+  "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
+  (print-debug "subtype")
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
-      (format stream "~<psub {~/pvs:pp-dk/} ~5i~:_~:/pvs:pp-dk/~:>"
-              (list supertype predicate)))))
+      (pprint-logical-block (stream nil)
+        (write-string "psub " stream)
+        (pprint-indent :block 0 stream)
+        (when (and *explicit* supertype)
+          (format stream "{~/pvs:pp-dk/} " supertype)
+          (pprint-indent :block 5 stream))
+        (pprint-newline :fill stream)
+        (pp-dk stream predicate t at-sign-p)))))
+
+(defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
+  "Used in e.g. (equivalence?)"
+  (print-debug "expr-as-type")
+  (pp-dk stream (expr te) colon-p at-sign-p))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM."
@@ -690,21 +715,17 @@ name resolution"
   (pp-quantifier stream ex colon-p at-sign-p "∀"))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
-  "f(x)"
-  (print-debug "application")
-  (let ((op (operator* ex))
-        (args (alexandria:flatten (arguments* ex))))
-    (if (type op)
-        (let* ((types (funtype->types (type op)))
-               (types (reverse (cdr (reverse types))))
-               (args (pairlis args types)))
-          (with-parens (stream colon-p)
-            (format stream "~<~/pvs:pp-dk/ ~i~:_~{~:/pvs:pp-cast/~^ ~:_~}~:>"
-                    (list op args))))
-        (with-parens (stream colon-p)
-          ;; REVIEW currently, application judgement generate such cases
-          (format stream "~<~/pvs:pp-dk/ ~i~:_~{~:/pvs:pp-dk/~^ ~:_~}~:>"
-                  (list op args))))))
+  (print-debug  "application")
+  (let* ((op (operator* ex))
+         (args (alexandria:flatten (arguments* ex)))
+         (args-types (mapcar #'type-of-expr args)))
+    (with-parens (stream colon-p)
+      (pprint-logical-block (stream nil)
+        (pp-dk stream op)
+        (pprint-indent :block 0 stream)
+        (pprint-newline :fill stream)
+        (format stream "~{~:/pvs:pp-cast/~^ ~:_~}"
+                (pairlis args args-types))))))
 
 (defmethod pp-dk (stream (ex projection-application)
                   &optional _colon-p _at-sign-p)
@@ -837,7 +858,8 @@ name resolution"
       ;; these tuple types can only happen in actuals since we currify
       ;; everything and it’s the only place where types can be given as
       ;; arguments
-      (dolist (ty (types (expr ac)))
-        (write-char #\space stream)
-        (pp-dk stream ty t at-sign-p))
-      (pp-dk stream (expr ac) accolon-p at-sign-p)))
+      ;; FIXME using pred[[T,T]] will be translated to pred T T which does not
+      ;; exist, pred expects one argument, and pred (t ~> t) expands to
+      ;; ((t ~> t) ~> bool) whereas pred[[T,T]] expands to (t ~> t ~> bool)
+      (format stream "~{~:/pvs:pp-dk/~^ ~}" (types (expr ac)))
+      (pp-dk stream (expr ac) colon-p at-sign-p)))
