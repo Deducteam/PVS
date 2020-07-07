@@ -34,7 +34,7 @@ the symbols with a module id.")
           (*print-right-margin* 78))
       (format stream "~{~/pvs:pp-reqopen/~&~}"
               '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"
-                "unif_rules" "deptype"))
+                "unif_rules" "deptype" "pairs"))
       (pp-dk stream obj))))
 
 (declaim (type type-name *type*))
@@ -112,6 +112,8 @@ psub u_pred.")
 
 ;;; Misc functions
 
+;; FIXME: should become useless when tuple types are properly handled. Only one
+;; call remain in `pprint-funtype’ for the case of dependent bindings
 (declaim (ftype (function (type-expr type-expr) funtype) currify*))
 (defgeneric currify* (dom ran)
   (:documentation "Currify type DOM into CDOM to yield type
@@ -197,12 +199,7 @@ currification.")
 ;; [[a, b, c] -> d], while ‘tupletype’ is used for [a, b, c -> d].
 ;; ‘domain-tupletype’ is a sub-type of ‘tupletype’, we process both the same
 ;; way.
-
-(defmethod pprint-funtype ((domain tupletype) range stream &optional wrap)
-  "Currify the tuple type, [a,b,c -> d] as [a -> [b -> [c -> d]]]"
-  (print-debug "pprint-funtype tupletype")
-  (with-parens (stream wrap)
-    (pp-dk stream (currify* domain range))))
+;; FIXME: update this wrt kept tuple types
 
 ;; NOTE same as above for ‘dep-domain-tupletype’ representing
 ;; [d: [n:nat, ...] -> c(d`1)] and ‘dep-binding’. It seems that the conversion
@@ -295,6 +292,12 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
               (write-char #\Space stream)
               (with-parens (stream t)
                 (pprint-abstraction newex (list (car bindings)) stream))))))))
+
+(declaim (ftype (function ((polylist expr) stream *) null) pprint-tuple))
+(defun pprint-tuple (args stream &optional wrap)
+  (with-parens (stream wrap)
+    (pprint-logical-block (stream nil)
+      (format stream "ndpair"))))
 
 ;; REVIEW rename into `abstract-thy' or something of the kind
 (declaim (ftype (function (type-expr symbol stream *) null) pprint-prenex))
@@ -626,9 +629,19 @@ See parse.lisp:826"
 ;;; Type expressions
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
-  ;; REVIEW this function might be obsolete since we currify everything
-  "[bool, bool]"
-  (error "tupletype can not be used"))
+  "[bool, bool] but also [bool, bool -> bool]"
+  (print-debug "tuple-type")
+  (with-slots (types) te
+    (with-parens (stream colon-p)
+      (pprint-logical-block (stream nil)
+        (write-string "σ " stream)
+        ;; Any tuple type has at least two elements
+        (if (= 2 (length types))
+            (destructuring-bind (s u) types
+              (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/" s u))
+            (destructuring-bind (hd &rest tl) types
+              (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+                      hd (make-tupletype tl))))))))
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
@@ -715,20 +728,32 @@ name resolution"
 (defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∀"))
 
-(defmethod pp-dk (stream (ex application) &optional colon-p at-sign-p)
-  (print-debug  "application")
-  (let* ((op (operator* ex))
-         (args (alexandria:flatten (arguments* ex)))
-         (args-types (mapcar #'type-of-expr args)))
-    (with-parens (stream colon-p)
-      (pprint-logical-block (stream nil)
-        (pp-dk stream op)
-        (write-char #\space stream)
-        (pprint-indent :block 0 stream)
-        (pprint-newline :fill stream)
-        (format stream "~{~:/pvs:pp-cast/~^ ~:_~}"
-                (pairlis args args-types))))))
+(defmethod pp-dk (stream (ex application) &optional colon-p _at-sign-p)
+  (print-debug "application")
+  (labels
+      ((pprint-tuple (args &optional wrap)
+         "Print arguments ARGS as a tuple, with a cast on each element."
+         (if (= (length args) 1)
+             (pp-cast stream (cons (car args) (type-of-expr (car args))) wrap)
+             (destructuring-bind (hd &rest tl) args
+               (with-parens (stream wrap)
+                 (format stream "σcons ~:/pvs:pp-cast/ "
+                         (cons hd (type-of-expr hd)))
+                 (pprint-tuple tl wrap))))))
+    (declare (ftype (function ((polylist expr) stream *) null) pprint-tuple))
+    (let ((op (operator* ex)))
+      (with-parens (stream colon-p)
+        (pprint-logical-block (stream nil)
+          (pp-dk stream op)
+          (write-char #\space stream)
+          (pprint-indent :block 0 stream)
+          (pprint-newline :fill stream)
+          (pprint-logical-block (stream (arguments* ex))
+            (pprint-tuple (pprint-pop) t)
+            (pprint-exit-if-list-exhausted)
+            (write-char #\space stream)))))))
 
+;; FIXME: change this to a succession of projections `fst' and `snd'
 (defmethod pp-dk (stream (ex projection-application)
                   &optional _colon-p _at-sign-p)
   "d`1 or PROJ_1(d)"
