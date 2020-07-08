@@ -6,8 +6,10 @@
 ;;; between [[t1, ..., tn] -> r] and [t1 -> [t2 -> ... [tn -> r] ... ]]
 ;;; TODO module resolution and importing
 ;;; TODO recursive functions
-;;; TODO product types and record types
 ;;; TODO assuming sections
+;;; TODO dependent pairs
+;;; TODO dependent products
+;;; TODO records
 
 (in-package :pvs)
 (require "alexandria")
@@ -60,14 +62,6 @@ the symbols with a module id.")
 ;;; PVS context [x: nat, y: reals, z: nznat] is represented as ((z . nznat) (y .
 ;;; reals) (x . nat)), the most recent binding is on top (stack structure).
 
-(declaim (type (polylist (cons (cons fixnum symbol) symbol)) *dep-bindings*))
-(defparameter *dep-bindings* nil
-  "List of residues from currification of dependent bindings. A dependent
-binding of the form [a:[b:t1,c:t2]->d(a`1,a`2)] is currified to
-[b:t1->[c:t2->d(b,c)]]. In this case, this list contains
-(((1 . a) . b) ((2 . a) . c)) which allows to find the adequate variable when
-printing projection a`1 or a`2.")
-
 (deftype context ()
   "A context is an association list mapping symbols to types."
   '(polylist (cons symbol type-expr)))
@@ -112,22 +106,6 @@ psub u_pred.")
 
 ;;; Misc functions
 
-;; FIXME: should become useless when tuple types are properly handled. Only one
-;; call remain in `pprint-funtype’ for the case of dependent bindings
-(declaim (ftype (function (type-expr type-expr) funtype) currify*))
-(defgeneric currify* (dom ran)
-  (:documentation "Currify type DOM into CDOM to yield type
-[CDOM -> RAN]. PVS uses a lot of tuple types for functions.")
-  (:method (domain range) (make-funtype domain range)))
-
-(defmethod currify* ((dom tupletype) ran)
-  (labels ((curr (ts acc)
-             "Make a funtype of types TS with range ACC."
-             (if (consp ts)
-                 (curr (cdr ts) (currify* (car ts) acc))
-                 acc)))
-    (curr (reverse (types dom)) ran)))
-
 (declaim (ftype (function (expr) type-expr) type-of-expr))
 (defgeneric type-of-expr (ex)
   (:documentation "Get the type attributed to expression EX by PVS.")
@@ -167,7 +145,6 @@ a function name from where the debug is called)."
   (format t "~%  tct:~i~<~a~:>" (list *ctx-thy*))
   (format t "~%  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
-  (format t "~%  dbd:~i~<~a~:>" (list *dep-bindings*))
   (format t "~%  lct:~i~<~a~:>" (list *ctx-local*)))
 
 ;;; Specialised printing functions
@@ -194,53 +171,6 @@ currification.")
     "Build the function type [DOMAIN -> RANGE]."
     (with-parens (stream wrap)
       (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
-
-;; NOTE ‘domain-tupletype’ is the type of the domain in expressions like
-;; [[a, b, c] -> d], while ‘tupletype’ is used for [a, b, c -> d].
-;; ‘domain-tupletype’ is a sub-type of ‘tupletype’, we process both the same
-;; way.
-;; FIXME: update this wrt kept tuple types
-
-;; NOTE same as above for ‘dep-domain-tupletype’ representing
-;; [d: [n:nat, ...] -> c(d`1)] and ‘dep-binding’. It seems that the conversion
-;; to the sub-type is not properly handled.
-
-(defmethod pprint-funtype ((domain dep-binding) range stream &optional wrap)
-  (print-debug "pprint-funtype dep-binding")
-  (with-slots (id declared-type) domain
-    (if
-     (tupletype? declared-type)
-     ;; If the binding is a tuple type of the form
-     ;; [d:[n:nat,t,vect[t,n] -> RANGE], we discard ‘d’ and add the binding
-     ;; ‘d`1 . n’ to ‘*dep-bindings*’ and call back ‘pprint-funtype’ on the
-     ;; type [n:nat -> [t -> [vect[t,n] -> RANGE]]]. RANGE can contain
-     ;; projections of the form d`1, but they are replaced by method ‘pp-dk’
-     ;; called on ‘projection-application’ instances which looks into
-     ;; ‘*dep-bindings*’.
-     (labels
-         ((vars (index rest)
-            "Enrich `*dep-bindings*' with cons (t`i . x) where t is the top
-binding of DOMAIN, i is INDEX and REST is the tuple type, if car REST is a
-binding."
-            (declaim (type fixnum index))
-            (declaim (type list rest))
-            (if (consp rest)
-                (destructuring-bind (hd &rest tl) rest
-                  (if (dep-binding? hd)
-                      (let* ((keyproj (cons index id))
-                             (*dep-bindings*
-                               (acons keyproj (id hd) *dep-bindings*)))
-                        (vars (+ 1 index) tl))
-                      (vars (+ 1 index) tl)))
-                (pp-dk stream (currify* declared-type range) wrap))))
-       (vars 1 (types declared-type)))
-     (with-parens (stream wrap)
-       (pprint-logical-block (stream nil)
-         (format stream "arrd ~:_{~/pvs:pp-dk/} " declared-type)
-         (pprint-newline :fill stream)
-         (pprint-abstraction range
-                             (list (make-bind-decl id declared-type))
-                             stream t))))))
 
 (declaim (ftype (function (expr (polylist bind-decl) stream *) null)
                 pprint-abstraction))
@@ -753,16 +683,6 @@ name resolution"
             (pprint-exit-if-list-exhausted)
             (write-char #\space stream)))))))
 
-;; FIXME: change this to a succession of projections `fst' and `snd'
-(defmethod pp-dk (stream (ex projection-application)
-                  &optional _colon-p _at-sign-p)
-  "d`1 or PROJ_1(d)"
-  (with-slots (index argument) ex
-    (let ((it (assoc (cons index (id argument)) *dep-bindings* :test #'equalp)))
-      (unless it
-        (error "Projection ~a not found in ~a" ex *dep-bindings*))
-      (pp-sym stream (cdr it)))))
-
 ;; REVIEW in all logical connectors, the generated variables should be added to
 ;; a context to be available to type expressions.
 
@@ -880,13 +800,4 @@ name resolution"
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
   (print-debug "actual")
-  (if (tupletype? (expr ac))
-      ;; Tuple types can happen, for instance with pred[[T,T]]
-      ;; these tuple types can only happen in actuals since we currify
-      ;; everything and it’s the only place where types can be given as
-      ;; arguments
-      ;; FIXME using pred[[T,T]] will be translated to pred T T which does not
-      ;; exist, pred expects one argument, and pred (t ~> t) expands to
-      ;; ((t ~> t) ~> bool) whereas pred[[T,T]] expands to (t ~> t ~> bool)
-      (format stream "~{~:/pvs:pp-dk/~^ ~}" (types (expr ac)))
-      (pp-dk stream (expr ac) colon-p at-sign-p)))
+  (pp-dk stream (expr ac) colon-p at-sign-p))
