@@ -297,6 +297,7 @@ of `*ctx-thy*'."
 (declaim (ftype (function (stream (cons expr type-expr) * *) null) pp-cast))
 (defun pp-cast (stream at &optional colon-p _at-sign-p)
   "Print a casting of `car' of AT to type `cdr' of AT."
+  (print-debug "pp-cast")
   (with-parens (stream colon-p)
     (format stream
             "cast ~:[~;{_} ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
@@ -308,7 +309,10 @@ of `*ctx-thy*'."
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
 in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
-arguments should be wrapped into parentheses."))
+arguments should be wrapped into parentheses.")
+  (:method (stream obj &optional c a)
+    (describe obj)
+    (error "Unexpected element: ~w." obj)))
 
 (defmethod pp-dk (stream (mod module) &optional colon-p at-sign-p)
   "Print the declarations of module MOD."
@@ -659,29 +663,51 @@ name resolution"
   (pp-quantifier stream ex colon-p at-sign-p "∀"))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p _at-sign-p)
+  "Print application EX, applying casts to the arguments. The expression EX
+``f(e1,e2)(g1,g2)'' will be printed as
+``f (cast t _ (σcons e1 e2) _) (cast u _ (σcons g1 g2) _)''."
   (print-debug "application")
-  (labels
-      ((pprint-tuple (args &optional wrap)
-         "Print arguments ARGS as a tuple, with a cast on each element."
-         (if (= (length args) 1)
-             (pp-cast stream (cons (car args) (type-of-expr (car args))) wrap)
-             (destructuring-bind (hd &rest tl) args
-               (with-parens (stream wrap)
-                 (format stream "σcons ~:/pvs:pp-cast/ "
-                         (cons hd (type-of-expr hd)))
-                 (pprint-tuple tl wrap))))))
-    (declare (ftype (function ((polylist expr) stream *) null) pprint-tuple))
-    (let ((op (operator* ex)))
-      (with-parens (stream colon-p)
-        (pprint-logical-block (stream nil)
-          (pp-dk stream op)
-          (write-char #\space stream)
-          (pprint-indent :block 0 stream)
-          (pprint-newline :fill stream)
-          (pprint-logical-block (stream (arguments* ex))
-            (pprint-tuple (pprint-pop) t)
-            (pprint-exit-if-list-exhausted)
-            (write-char #\space stream)))))))
+  (if (null (type ex))
+      ;; For some reason, application-judgements end up as application
+      ;; expressions. We don’t handle them here.
+      (format stream "// Application judgement")
+      (let* ((op (operator* ex))
+             (dom (domain* (type-of-expr op)))
+             (args (arguments* ex)))
+        (with-parens (stream colon-p)
+          (pprint-logical-block (stream nil)
+            (pp-dk stream op)
+            (write-char #\space stream)
+            (pprint-indent :block 0 stream)
+            (pprint-newline :fill stream)
+            ;; Perhaps a processing will be necessary if `args’ `dom’ do not
+            ;; have same length (in case of partial application)
+            (pprint-logical-block (stream (pairlis args dom))
+              (let* ((args-ty (pprint-pop))
+                     (args (car args-ty))
+                     (ty (cdr args-ty)))
+                (pp-cast stream
+                         (if (<= 2 (length args))
+                             (cons (make!-tuple-expr args) ty)
+                             (cons (car args) ty))
+                         t))
+              (pprint-exit-if-list-exhausted)
+              (write-char #\space stream)))))))
+
+(defmethod pp-dk (stream (ex tuple-expr) &optional colon-p at-sign-p)
+  (print-debug "tuple-expr")
+  (with-slots (exprs) ex
+    ;; Tuple types have at least 2 elements (PVS invariant)
+    (with-parens (stream colon-p)
+      (cond
+        ((= 2 (length exprs))
+         (destructuring-bind (x y) exprs
+           (format stream "σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" x y)))
+        ((< 2 (length exprs))
+         (destructuring-bind (hd &rest tl) exprs
+           (format stream "σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+                   hd (make!-tuple-expr tl))))
+        (t (error "Tuple ~a have too few elements." ex))))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
 ;; a context to be available to type expressions.
@@ -782,13 +808,6 @@ name resolution"
     ;; NOTE we might be able to remove parens (see with LP precedence)
     (format stream "¬ ~:/pvs:pp-dk/" (argument ex))))
 
-;; Not documented, subclass of tuple-expr
-(defmethod pp-dk (stream (ex arg-tuple-expr) &optional colon-p at-sign-p)
-  "(t, u, v)"
-  (print "arg-tuple-expr")
-  (with-slots (exprs) ex
-    (format stream "~{~:/pvs:pp-dk/~^ ~_~}" exprs)))
-
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
   (print "number-expr")
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
@@ -801,3 +820,6 @@ name resolution"
   "Formal parameters of theories, the `t' in `pred[t]'."
   (print-debug "actual")
   (pp-dk stream (expr ac) colon-p at-sign-p))
+
+(defmethod pp-dk (stream (ex bitvector) &optional _colon-p _at-sign-p)
+  (error "Bitvectors not handled yet."))
