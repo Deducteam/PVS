@@ -28,6 +28,11 @@
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
 
+(declaim (type (polylist (cons symbol symbol)) *pvs-builtins-thy*))
+(defparameter *pvs-builtins-thy*
+  '((|&| . booleans) (|AND| . booleans) (|=>| . booleans) (|<=>| . booleans)
+    (IMPLIES . booleans) (IFF . booleans)))
+
 (declaim (ftype (function (syntax string) *) to-dk3))
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
@@ -647,8 +652,17 @@ name resolution"
       (t (with-parens (stream (consp actuals))
            ;; FIXME it seems that symbols from the prelude have ‘nil’ as
            ;; ‘mod-id’
-           (format stream "~/pvs:pp-sym/.~/pvs:pp-sym/" mod-id id)
-           (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))
+           (pprint-logical-block (stream nil)
+             (let ((mod (if (null mod-id)
+                            (cdr (assoc id *pvs-builtins-thy*))
+                            mod-id)))
+               (assert (not (null mod))
+                       (id mod)
+                       "Cannot get theory of identifier ~w." id)
+               (pp-sym stream mod)
+               (write-char #\. stream)
+               (pp-sym stream id)
+               (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t"

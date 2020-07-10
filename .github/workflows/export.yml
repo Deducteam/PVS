@@ -53,7 +53,7 @@ jobs:
         export SBCLISP_HOME="${HOME}/sbcl"
         make >output 2>&1
 
-    - name: export
+    - name: toy examples
       run: |
         ./test-pp-dk.sh -f lib/simple -t simple
         ./test-pp-dk.sh -f lib/simple -t prenex
@@ -62,9 +62,14 @@ jobs:
         ./test-pp-dk.sh -f lib/simple -t vector
         ./test-pp-dk.sh -f lib/simple -t vector_ops
         ./test-pp-dk.sh -f lib/simple -t linear_form
-        ./test-pp-dk.sh -f lib/prelude -t operator_defs
+
+    - name: prelude grand schelem
+      run: |
+        ./test-pp-dk.sh -f lib/prelude -t booleans
+        ./test-pp-dk.sh -f lib/prelude -t boolean_props
         ./test-pp-dk.sh -f lib/prelude -t xor_def
         ./test-pp-dk.sh -f lib/prelude -t quantifier_props
+        ./test-pp-dk.sh -f lib/prelude -t operator_defs
         ./test-pp-dk.sh -f lib/prelude -t defined_types
         ./test-pp-dk.sh -f lib/prelude -t orders
 

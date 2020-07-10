@@ -75,6 +75,12 @@ thyparams[d: TYPE, e: d]: THEORY BEGIN
   id : AXIOM op(x,e) = x
 END thyparams
 
+thyparams_tup[d: TYPE, e: [d, d]]: THEORY BEGIN
+  x: VAR d
+  op: [[d, d], d -> d]
+  id: AXIOM op(e, x) = x
+END thyparams_tup
+
 mixedup[d: TYPE, n: nat, r: TYPE]: THEORY BEGIN
   avalue: [d -> r]
 END mixedup
@@ -106,6 +112,27 @@ BEGIN
   consc(n:nat)(e:t)(v:vector[t, n].vect): vector[t, n+1].vect
 END vect_ops
 
+tuples[t: TYPE]: THEORY
+BEGIN
+  f(n: nat, g: [nat -> nat]): nat
+  ffunc(n:nat)(g:[nat->nat]): nat
+  ftup(ng: [nat, [nat -> nat]]): nat
+  n: nat
+  g: [nat -> nat]
+  ng: [nat, [nat -> nat]]
+  x: nat = f(ng)
+  y: nat = f(n, g)
+  % z: nat = f(n)(g)
+  % x2: nat = ffunc(ng)
+  % y2: nat = ffunc(n, g)
+  z2: nat = ffunc(n)(g)
+  x3: nat = ftup(ng)
+  y3: nat =ftup(n, g)
+  % z3: nat = ftup(n)(g)
+  IMPORTING vector
+  tup: TYPE = [n: nat, v: vector[t,n].vect, vv: vector[t, n].vect]
+END tuples
+
 linear_form[t: TYPE, n: nat, (IMPORTING vector[t,n]) ker: vector[t,n].vect]: THEORY
 BEGIN
   form: [vector[t, n].vect -> nat]
@@ -114,4 +141,4 @@ END linear_form
 tfrom[t: TYPE, u: TYPE FROM t]: THEORY
 BEGIN
   value: u
-END tfrom 
+END tfrom
