@@ -331,14 +331,19 @@ command."
           (pvs-view-mode)
           (use-local-map pvs-show-formulas-map))))))
 
-(defpvs prettyprint-dedukti tcc (theoryref)
-  "View the Dedukti version of a theory."
+(defpvs prettyprint-dedukti tcc (theoryref &optional output)
+  "Print the Dedukti version of a theory THEORYREF in output OUTPUT if called
+with argument (with C-u)."
   (interactive (complete-theory-name "Prettyprint-dedukti theory named: "))
   (pvs-bury-output)
   (let* ((parts (split-string theoryref "#"))
-         (theoryname (or (cadr parts) (car parts))))
-    (message "Writing /tmp/%s.lp..." theoryname)
-    (pvs-send (format "(prettyprint-dedukti \"%s\")" theoryref)
+         (theoryname (or (cadr parts) (car parts)))
+         (output
+          (if (null output)
+              (format "/tmp/%s.lp" theoryname)
+            (file-truename output))))
+    (message "Writing %s..." output)
+    (pvs-send (format "(prettyprint-dedukti \"%s\" \"%s\")" theoryref output)
               nil "pp-dk3")))
 
 (defpvs show-tccs tcc (theoryref &optional arg)

@@ -66,6 +66,7 @@ jobs:
         ./test-pp-dk.sh -f lib/prelude -t xor_def
         ./test-pp-dk.sh -f lib/prelude -t quantifier_props
         ./test-pp-dk.sh -f lib/prelude -t defined_types
+        ./test-pp-dk.sh -f lib/prelude -t orders
 
     - name: type check
       run: |

@@ -81,8 +81,8 @@ are translated to rewriting variables.")
   "Contain theory formals. All declared (and defined) symbols must abstract on
 the definitions of this context using `pprint-prenex'. For instance, if this
 variable contains ((t . TYPE) (n . nat)), then all symbols will start by
-quantifying over a type and a natural. Note that since we implement prenex
-polymorphism, we will always quantify first on types, then on objects.")
+quantifying over a type and a natural. Note that we cannot separate types from
+value declarations because types may depend on values.")
 
 (declaim (type (polylist (cons symbol symbol)) *ctx-thy-subtypes*))
 (defparameter *ctx-thy-subtypes* nil
