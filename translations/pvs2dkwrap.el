@@ -1,4 +1,4 @@
-;;; test-pp-dk.el --- Translate a PVS theory to Dedukti
+;;; pvs2dkwrap.el --- Translate a PVS theory to Dedukti
 ;;; Commentary:
 ;; Should be called by PVS, in batch mode. The script takes three arguments:
 ;; - the filepath where the theory to translate is,
@@ -19,4 +19,4 @@
 (set-buffer "pvs")
 (let ((ct (buffer-string)))
   (princ ct))
-;;; test-pp-dk.el ends here
+;;; pvs2dkwrap.el ends here

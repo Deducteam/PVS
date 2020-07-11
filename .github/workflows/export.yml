@@ -55,23 +55,23 @@ jobs:
 
     - name: toy examples
       run: |
-        ./test-pp-dk.sh -f lib/simple -t simple
-        ./test-pp-dk.sh -f lib/simple -t prenex
-        ./test-pp-dk.sh -f lib/simple -t thyparams
-        ./test-pp-dk.sh -f lib/simple -t import
-        ./test-pp-dk.sh -f lib/simple -t vector
-        ./test-pp-dk.sh -f lib/simple -t vector_ops
-        ./test-pp-dk.sh -f lib/simple -t linear_form
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t simple
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t prenex
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t thyparams
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t import
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t vector
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t vector_ops
+        PVS=./pvs ./pvs2dk.sh -f lib/simple -t linear_form
 
     - name: prelude grand schelem
       run: |
-        ./test-pp-dk.sh -f lib/prelude -t booleans
-        ./test-pp-dk.sh -f lib/prelude -t boolean_props
-        ./test-pp-dk.sh -f lib/prelude -t xor_def
-        ./test-pp-dk.sh -f lib/prelude -t quantifier_props
-        ./test-pp-dk.sh -f lib/prelude -t operator_defs
-        ./test-pp-dk.sh -f lib/prelude -t defined_types
-        ./test-pp-dk.sh -f lib/prelude -t orders
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t booleans
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t boolean_props
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t xor_def
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t quantifier_props
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t defined_types
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t operator_defs
+        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t orders
 
     - name: type check
       run: |
