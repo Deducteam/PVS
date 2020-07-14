@@ -28,20 +28,17 @@
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
 
-(declaim (type (polylist (cons symbol symbol)) *pvs-builtins-thy*))
-(defparameter *pvs-builtins-thy*
-  '((|&| . booleans) (|AND| . booleans) (|=>| . booleans) (|<=>| . booleans)
-    (IMPLIES . booleans) (IFF . booleans)))
-
 (declaim (ftype (function (syntax string) *) to-dk3))
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t)
           (*print-right-margin* 78))
-      (format stream "~{~/pvs:pp-reqopen/~&~}"
-              '("lhol" "pvs_cert" "subtype" "bool_hol" "builtins" "prenex"
-                "unif_rules" "deptype" "pairs"))
+      (loop for m in
+            '(|lhol| |pvs_cert| |subtype| |bool_hol| |builtins| |prenex|
+              |unif_rules| |deptype| |pairs|)
+            do (pprint-reqopen m stream "personoj.encodings")
+            do (fresh-line stream))
       (pp-dk stream obj))))
 
 (declaim (type type-name *type*))
@@ -294,10 +291,16 @@ of `*ctx-thy*'."
       (ppp (remove-if-not #'(lambda (idt) (is-*type*-p (cdr idt)))
                           (reverse *ctx-thy*))))))
 
-(declaim (ftype (function (stream string * *) null) pp-reqopen))
-(defun pp-reqopen (stream mod &optional colon-p at-sign-p)
-  "Prints a require open module MOD directive on stream STREAM."
-  (format stream "require open personoj.encodings.~a" mod))
+(declaim (ftype (function (symbol stream string) *) pprint-reqopen))
+(defun pprint-reqopen (mod stream &optional root)
+  "Prints a ``require open'' directive opening module MOD with root path ROOT on
+stream STREAM."
+  (write-string "require open" stream)
+  (unless (null root)
+    (write-char #\space stream)
+    (write-string root stream)
+    (write-char #\. stream))
+  (princ mod stream))
 
 (declaim (ftype (function (stream (cons expr type-expr) * *) null) pp-cast))
 (defun pp-cast (stream at &optional colon-p _at-sign-p)
@@ -378,9 +381,23 @@ the declaration of TYPE FROM."
                                         *ctx-thy*))
                       ;; REVIEW adding to *ctx* might be superfluous
                       (*ctx* (acons (id hd) (declared-type hd) *ctx*)))
-                 (process-formals tl theory))))))))
+                 (process-formals tl theory)))))))
+       (up-to (e l &optional acc)
+         "Return all symbols of list L up to symbol E. If E is not in L, all L
+is returned. ACC contains all symbols before E (in reverse order)."
+         (declaim (type symbol e))
+         (declaim (type (polylist symbol) l))
+         (declaim (type (polylist symbol) acc))
+         (if (null l)
+             (reverse acc)
+             (destructuring-bind (hd &rest tl) l
+               (if (equal e hd) (reverse acc) (up-to e tl (cons hd acc)))))))
     (with-slots (id theory formals-sans-usings) mod
       (format stream "// Theory ~a~%" id)
+      (let ((prelude (mapcar #'id *prelude-theories*)))
+        (loop for m in (up-to id prelude)
+              do (pprint-reqopen m stream "personoj.prelude")
+              do (fresh-line stream)))
       (process-formals formals-sans-usings theory))))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
@@ -653,16 +670,15 @@ name resolution"
            ;; FIXME it seems that symbols from the prelude have ‘nil’ as
            ;; ‘mod-id’
            (pprint-logical-block (stream nil)
-             (let ((mod (if (null mod-id)
-                            (cdr (assoc id *pvs-builtins-thy*))
-                            mod-id)))
-               (assert (not (null mod))
-                       (id mod)
-                       "Cannot get theory of identifier ~w." id)
-               (pp-sym stream mod)
-               (write-char #\. stream)
-               (pp-sym stream id)
-               (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))))
+             (unless (null mod-id)
+               ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
+               ;; require-open’d
+               (pp-sym stream mod-id)
+               (write-char #\. stream))
+             (pp-sym stream mod)
+             (write-char #\. stream)
+             (pp-sym stream id)
+             (format stream "~{ ~:/pvs:pp-dk/~}" actuals)))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t"
