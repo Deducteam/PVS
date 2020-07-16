@@ -12,7 +12,6 @@
 ;;; TODO records
 
 (in-package :pvs)
-(require "alexandria")
 (export '(to-dk3))
 
 (deftype polylist (ty)
@@ -120,10 +119,10 @@ psub u_pred.")
 (defparameter *var-count* 0
   "Number of generated variables. Used to create fresh variable names.")
 
-(declaim (ftype (function () string) fresh-var))
-(defun fresh-var ()
+(declaim (ftype (function (string) string) fresh-var))
+(defun fresh-var (&key (prefix ""))
   "Provide a fresh variable name."
-  (let ((var-name (format nil "pvs~d" *var-count*)))
+  (let ((var-name (format nil "~apvs~d" prefix *var-count*)))
     (incf *var-count*)
     var-name))
 
@@ -148,6 +147,54 @@ a function name from where the debug is called)."
   (format t "~%  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
   (format t "~%  lct:~i~<~a~:>" (list *ctx-local*)))
+
+(defmacro with-default (default &body body)
+  "Rewrite to DEFAULT if it is not `nil', and rewrite to BODY otherwise."
+  `(if (null ,default)
+       (progn ,@body)
+       ,default))
+
+(declaim (ftype (function ((polylist list)) (polylist bind-decl))
+                args-to-bindings))
+(defun args-to-bindings (args)
+  "Transform a list of lists of arguments (as used by `formals') to a list of
+`bind-decl'. The function repacks split tuples into new tuples. For instance,
+the declaration ``f(x: nat, y: nat)(z:nat)'' will generate an argument ARG of
+the form `((<x: nat> <y: nat>) (<z: nat>))'. The unpacked tuple is
+`(<x: nat> <y: nat>)' which we repack into a new variable `<xy: [nat, nat]>' to
+yield `(<xy: [nat, nat]> <z: nat>)'. Consequently, occurrences of `x' and `y'
+must be converted to projections of `xy'."
+  (print "args-to-bindings")
+  (flet ((get-type (elt)
+           "Get the `declared-type' of ELT if it exists, otherwise get it from
+`*ctx*'."
+           (declare (type expr elt))
+           (with-slots (id declared-type) elt
+             (if (null declared-type)
+                 (let ((v-ty (assoc id *ctx*)))
+                   (assert (not (null v-ty))
+                           (id *ctx*)
+                           "Could not find variable ~S in context ~S."
+                           id *ctx*)
+                   (cdr v-ty))
+                 declared-type)))
+         (tovars (l)
+           "Transform elements of L to variables. For each element E of L, if E
+is a list of length more than one, then consider it as a tuple and create a new
+variable with a tuple type. Otherwise L is a list of longer 1, and we take the
+`car'."
+           (declare (type (polylist bind-decl) l))
+           (if (<= (length l) 1)
+               (car l)
+               (let ((var (intern (fresh-var :prefix "tup")))
+                     (typ (make-tupletype (mapcar #'declared-type l))))
+                 (make-bind-decl var typ)))))
+    (let ((tupled
+            (loop for arg in args
+                  collect
+                  (loop for e in arg
+                        collect (make-bind-decl (id e) (get-type e))))))
+      (mapcar #'tovars tupled))))
 
 ;;; Specialised printing functions
 
@@ -182,12 +229,16 @@ a λ). Note that the context `*ctx*' is enriched on each printed binding. The
 binding is automatically removed from the context thanks to dynamic scoping."
   (labels
       ((pprint-binding (id dtype)
+         (declare (type symbol id))
+         (declare (type type-expr type))
          (let ((dec (if (is-*type*-p dtype) "θ" "η")))
            (format stream "~<(~/pvs:pp-sym/: ~:_~a ~:/pvs:pp-dk/)~:>"
                    (list id dec dtype))))
        (pprint-abstraction* (term bindings)
          "Print term TERM abstracting on bindings BINDINGS. Bindings are
 typed if they were typed in PVS (they may be typed by a variable declaration)."
+         (declare (type expr term))
+         (declare (type (polylist bind-decl) bindings))
          (if (null bindings)
              (format stream ", ~:_~/pvs:pp-dk/" term)
              (with-slots (id type declared-type) (car bindings)
@@ -199,9 +250,6 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
                    (progn
                      (pprint-binding id (cdr (assoc id *ctx*)))
                      (pprint-abstraction* term (cdr bindings))))))))
-    (declaim (ftype (function (symbol type-expr) null) pprint-binding))
-    (declaim (ftype (function (expr (polylist bind-decl) null))
-                    pprint-abstraction*))
     (if (null bindings)
         (pp-dk stream ex wrap)
         (with-parens (stream wrap)
@@ -224,12 +272,6 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
               (write-char #\Space stream)
               (with-parens (stream t)
                 (pprint-abstraction newex (list (car bindings)) stream))))))))
-
-(declaim (ftype (function ((polylist expr) stream *) null) pprint-tuple))
-(defun pprint-tuple (args stream &optional wrap)
-  (with-parens (stream wrap)
-    (pprint-logical-block (stream nil)
-      (format stream "ndpair"))))
 
 ;; REVIEW rename into `abstract-thy' or something of the kind
 (declaim (ftype (function (type-expr symbol stream *) null) pprint-prenex))
@@ -328,8 +370,8 @@ arguments should be wrapped into parentheses.")
       ((handle-var-decl (stream vd rest)
          "Add dynamically variable declaration VD to `*ctx*' and print the rest
 of the theory REST with the new context in (dynamic) scope."
-         (declaim (type var-decl vd))
-         (declaim (type list rest))
+         (declare (type var-decl vd))
+         (declare (type list rest))
          (with-slots (id declared-type) vd
            (let ((*ctx* (acons id declared-type *ctx*)))
              (pprint-decls rest))))
@@ -358,8 +400,8 @@ the declaration of TYPE FROM."
                 (pprint-decls (cdr decls))))))
        (process-formals (formals theory)
          "Handle formal parameters FORMALS of theory THEORY."
-         (declaim (type (polylist formal-decl) formals))
-         (declaim (type list theory))
+         (declare (type (polylist formal-decl) formals))
+         (declare (type list theory))
          ;; FIXME importing must be processed too
          (if
           (null formals)
@@ -385,9 +427,9 @@ the declaration of TYPE FROM."
        (up-to (e l &optional acc)
          "Return all symbols of list L up to symbol E. If E is not in L, all L
 is returned. ACC contains all symbols before E (in reverse order)."
-         (declaim (type symbol e))
-         (declaim (type (polylist symbol) l))
-         (declaim (type (polylist symbol) acc))
+         (declare (type symbol e))
+         (declare (type (polylist symbol) l))
+         (declare (type (polylist symbol) acc))
          (if (null l)
              (reverse acc)
              (destructuring-bind (hd &rest tl) l
@@ -429,7 +471,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
-      (let* ((formals (alexandria:flatten formals))
+      (let* ((formals (args-to-bindings formals))
              (ctx (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
              (bindings (concatenate 'list ctx formals)))
         (pprint-abstraction type-expr bindings stream)))
@@ -480,11 +522,11 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream "abort"))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
-  (print "const-decl")
+  (print-debug "const-decl")
   (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
-        (let* ((formals (alexandria:flatten formals))
+        (let* ((formals (args-to-bindings formals))
                (ctx-thy (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
                (bindings (concatenate 'list ctx-thy formals)))
           (pprint-logical-block (stream nil)
@@ -507,7 +549,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
   (with-slots (id definition formals type) decl
-    (let ((formals (alexandria:flatten formals))
+    (let ((formals (args-to-bindings formals))
           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
       (pprint-logical-block (stream nil)
@@ -530,6 +572,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl conversion-decl) &optional colon-p at-sign-p)
   "CONVERSION elt, there are conversion(plus|minus)-decl as well."
+  (print-debug "conversion-decl")
   (with-slots (id) decl
     (format stream "// Conversion: ~/pvs:pp-sym/" id)))
 
@@ -545,7 +588,7 @@ See parse.lisp:826"
   (print "application-judgement")
   (with-slots (id formals declared-type judgement-type name) decl
     (format stream "// Application judgement~%")
-    (let* ((args (alexandria:flatten formals))
+    (let* ((args (args-to-bindings formals))
            (term (make!-application name args)))
       (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P :-~&"
               declared-type term)
@@ -675,8 +718,6 @@ name resolution"
                ;; require-open’d
                (pp-sym stream mod-id)
                (write-char #\. stream))
-             (pp-sym stream mod)
-             (write-char #\. stream)
              (pp-sym stream id)
              (format stream "~{ ~:/pvs:pp-dk/~}" actuals)))))))
 

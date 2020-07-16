@@ -48,6 +48,12 @@ BEGIN
   succ_nz: JUDGEMENT succ(n: nznat) HAS_TYPE nznat
 END simple
 
+tupfun: THEORY
+BEGIN
+  x, y: VAR boolean
+  f(x, y): bool = NOT (x AND y)
+END tupfun
+
 prenex[d: TYPE, r: TYPE]:THEORY
 BEGIN
   % Type definition using theory parameters
