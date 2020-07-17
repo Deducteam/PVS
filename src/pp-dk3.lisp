@@ -643,7 +643,7 @@ See parse.lisp:826"
               declared-type term)
       (let* ((hd (make-instance 'name-expr :id id)) ; Unsafe here
              (uterm (make-instance 'application :operator hd
-                                                :argument args)))
+                                                :argument (car form-spec))))
         (format stream "//   P = ~/pvs:pp-dk/.~&" uterm)))))
 
 
