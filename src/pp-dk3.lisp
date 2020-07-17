@@ -251,7 +251,7 @@ binding is automatically removed from the context thanks to dynamic scoping."
        (pprint-abstraction* (term bindings)
          "Print term TERM abstracting on bindings BINDINGS. Bindings are
 typed if they were typed in PVS (they may be typed by a variable declaration)."
-         (declare (type expr term))
+         (declare (type (or expr type-expr) term))
          (declare (type (polylist bind-decl) bindings))
          (if (null bindings)
              (format stream ", ~:_~/pvs:pp-dk/" term)
