@@ -105,6 +105,14 @@ psub u_pred.")
   "Convert element E of a context to a `bind-decl'."
   (make!-bind-decl (car e) (cdr e)))
 
+;;; A bit like a context but not truly a context
+(declaim (type (polylist (cons symbol (cons integer (cons integer symbol))))
+               *packed-tuples*))
+(defparameter *packed-tuples* nil
+  "A mapping (v . (n . (m . s))) of this list means that variable ``v'' is the
+``n''th element of tuple ``s'' of length ``m''. It is filled by `pack-arg-tuple'
+(using lexical scoping).")
+
 ;;; Misc functions
 
 (declaim (ftype (function (expr) type-expr) type-of-expr))
@@ -146,55 +154,62 @@ a function name from where the debug is called)."
   (format t "~%  tct:~i~<~a~:>" (list *ctx-thy*))
   (format t "~%  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
+  (format t "~%  tup:~i~<~a~:>" (list *packed-tuples*))
   (format t "~%  lct:~i~<~a~:>" (list *ctx-local*)))
 
-(defmacro with-default (default &body body)
-  "Rewrite to DEFAULT if it is not `nil', and rewrite to BODY otherwise."
-  `(if (null ,default)
-       (progn ,@body)
-       ,default))
-
-(declaim (ftype (function ((polylist list)) (polylist bind-decl))
-                args-to-bindings))
-(defun args-to-bindings (args)
-  "Transform a list of lists of arguments (as used by `formals') to a list of
-`bind-decl'. The function repacks split tuples into new tuples. For instance,
-the declaration ``f(x: nat, y: nat)(z:nat)'' will generate an argument ARG of
-the form `((<x: nat> <y: nat>) (<z: nat>))'. The unpacked tuple is
-`(<x: nat> <y: nat>)' which we repack into a new variable `<xy: [nat, nat]>' to
-yield `(<xy: [nat, nat]> <z: nat>)'. Consequently, occurrences of `x' and `y'
-must be converted to projections of `xy'."
-  (print "args-to-bindings")
-  (flet ((get-type (elt)
-           "Get the `declared-type' of ELT if it exists, otherwise get it from
-`*ctx*'."
-           (declare (type expr elt))
-           (with-slots (id declared-type) elt
-             (if (null declared-type)
-                 (let ((v-ty (assoc id *ctx*)))
-                   (assert (not (null v-ty))
-                           (id *ctx*)
-                           "Could not find variable ~S in context ~S."
-                           id *ctx*)
-                   (cdr v-ty))
-                 declared-type)))
-         (tovars (l)
-           "Transform elements of L to variables. For each element E of L, if E
-is a list of length more than one, then consider it as a tuple and create a new
-variable with a tuple type. Otherwise L is a list of longer 1, and we take the
-`car'."
-           (declare (type (polylist bind-decl) l))
-           (if (<= (length l) 1)
-               (car l)
-               (let ((var (intern (fresh-var :prefix "tup")))
-                     (typ (make-tupletype (mapcar #'declared-type l))))
-                 (make-bind-decl var typ)))))
-    (let ((tupled
-            (loop for arg in args
-                  collect
-                  (loop for e in arg
-                        collect (make-bind-decl (id e) (get-type e))))))
-      (mapcar #'tovars tupled))))
+(declaim (ftype
+          (function (list
+                     (polylist bind-decl)
+                     (polylist (cons symbol
+                                     (cons integer
+                                           (cons integer symbol)))))
+                    (cons (polylist bind-decl)
+                          (polylist (cons symbol
+                                          (cons integer
+                                                (cons integer symbol))))))
+          pack-arg-tuple))
+(defun pack-arg-tuple (args &key vars projspec)
+  "Transform the list of list of arguments in ARGS into a list. For any element
+E of ARGS, if E has length one, the result is the element. Otherwise, a new
+variable `v' is created, its type is sought from `*ctx*' and we add a binding
+`(x . (n . v))' for each symbol in E, where `x' is the symbol, `n' is its
+position in E. The list of variables and the mapping are returned as a `cons'
+cell."
+  (labels ((type-with-ctx (elt)
+             (declare (type expr elt))
+             (with-slots (id declared-type) elt
+               (if (null declared-type)
+                   (let ((v-ty (assoc id *ctx*)))
+                     (assert (not (null v-ty))
+                             (id *ctx*)
+                             "Could not find variable ~S in context ~S."
+                             id *ctx*)
+                     (cdr v-ty))
+                   declared-type)))
+           (pack-type (l)
+             "Make a `bind-decl' out of L, either by taking the `car' or
+creating a variable."
+             (if (= 1 (length l))
+                 (let ((elt (car l)))
+                   (make-bind-decl (id l) (type-with-ctx l)))
+                 (let ((var (intern (fresh-var :prefix "tup")))
+                       (typ (make-tupletype (mapcar #'type-with-ctx l))))
+                   (make-bind-decl var typ))))
+           (get-pspec (l var)
+             (declare (type list l))
+             (declare (type symbol var))
+             (let ((len (length l)))
+               (unless (= 1 len)
+                 (loop for e in l
+                       for i upto (- len 1)
+                       collect (cons (id e) (cons i (cons len var))))))))
+    (if (null args) (cons vars projspec)
+        (destructuring-bind (hd &rest tl) args
+          (let* ((bd (pack-type hd))
+                 (spec (get-pspec hd (id bd))))
+            (pack-arg-tuple
+             tl :vars (cons bd vars)
+             :projspec (concatenate 'list spec projspec)))))))
 
 ;;; Specialised printing functions
 
@@ -344,6 +359,28 @@ stream STREAM."
     (write-char #\. stream))
   (princ mod stream))
 
+(declaim (ftype (function (symbol integer integer stream) null)
+                pprint-proj-spec))
+(defun pprint-proj-spec (var index len stream)
+  "Print the INDEXth projection of VAR on stream STREAM.
+`pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
+  (labels ((projs-of-ind (ind len)
+             "Transform a projection in a list into a succession of `fst' and
+`snd' projections."
+             (declare (type integer ind))
+             (declare (type integer len))
+             (let ((snd-projs (make-list ind :initial-element "σsnd")))
+               (if (= ind (- len 1)) snd-projs (cons "σfst" snd-projs))))
+           (pprint-projs (ps)
+             (declare (type (polylist string) ps))
+             (if (null ps)
+                 (pp-sym stream var)
+                 (with-parens (stream t)
+                   (write-string (car ps) stream)
+                   (write-char #\space stream)
+                   (pprint-projs (cdr ps))))))
+    (pprint-projs (projs-of-ind index len))))
+
 (declaim (ftype (function (stream (cons expr type-expr) * *) null) pp-cast))
 (defun pp-cast (stream at &optional colon-p _at-sign-p)
   "Print a casting of `car' of AT to type `cdr' of AT."
@@ -471,9 +508,10 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
-      (let* ((formals (args-to-bindings formals))
+      (let* ((form-spec (pack-arg-tuple formals))
+             (*packed-tuples* (cdr form-spec))
              (ctx (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
-             (bindings (concatenate 'list ctx formals)))
+             (bindings (concatenate 'list ctx (car form-spec))))
         (pprint-abstraction type-expr bindings stream)))
     (setf *signature* (cons id *signature*))))
 
@@ -526,9 +564,10 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
-        (let* ((formals (args-to-bindings formals))
+        (let* ((form-proj (pack-arg-tuple formals))
+               (*packed-tuples* (cdr form-proj))
                (ctx-thy (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
-               (bindings (concatenate 'list ctx-thy formals)))
+               (bindings (concatenate 'list ctx-thy (car form-proj))))
           (pprint-logical-block (stream nil)
             (format stream "definition ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
@@ -549,7 +588,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
   (with-slots (id definition formals type) decl
-    (let ((formals (args-to-bindings formals))
+    (let ((form-spec (pack-arg-tuple formals))
+          (*packed-tuples* (cdr form-spec))
           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
       (pprint-logical-block (stream nil)
@@ -563,9 +603,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
                               (mapcar #'car *ctx-thy*)
-                              (mapcar #'id formals)))
+                              (mapcar #'id (car form-spec))))
       (let ((*ctx-local* (concatenate 'list
-                                      (ctx-of-bindings formals)
+                                      (ctx-of-bindings (car form-spec))
                                       *ctx-thy*))
             (*ctx* nil))
         (pp-dk stream definition colon-p at-sign-p)))))
@@ -588,8 +628,9 @@ See parse.lisp:826"
   (print "application-judgement")
   (with-slots (id formals declared-type judgement-type name) decl
     (format stream "// Application judgement~%")
-    (let* ((args (args-to-bindings formals))
-           (term (make!-application name args)))
+    (let* ((form-spec (pack-arg-tuple formals))
+           (*packed-tuples* (cdr form-spec))
+           (term (make!-application name (car form-spec))))
       (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P :-~&"
               declared-type term)
       (let* ((hd (make-instance 'name-expr :id id)) ; Unsafe here
@@ -684,6 +725,11 @@ name resolution"
   (print-debug "name")
   (with-slots (id mod-id actuals) ex
     (cond
+      ;; Member of an unpacked tuple: as it has been repacked, we transform this
+      ;; to successsion of projections
+      ((assoc id *packed-tuples*)
+       (destructuring-bind (v n m . w) (assoc id *packed-tuples*)
+         (pprint-proj-spec w n m stream)))
       ((assoc id *ctx*) (pp-sym stream id))
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
       ((member id *signature*)
@@ -710,8 +756,6 @@ name resolution"
       ((assoc id *dk-sym-map*) (pp-sym stream id))
       ;; Otherwise, it’s a symbol from an imported theory
       (t (with-parens (stream (consp actuals))
-           ;; FIXME it seems that symbols from the prelude have ‘nil’ as
-           ;; ‘mod-id’
            (pprint-logical-block (stream nil)
              (unless (null mod-id)
                ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
