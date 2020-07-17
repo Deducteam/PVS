@@ -52,6 +52,14 @@ the symbols with a module id.")
 (defparameter *signature* nil
   "Symbols defined in the theory.")
 
+(declaim (ftype (function (list list) list) pairlis*))
+(defun pairlis* (l1 l2)
+  "Like `pairlis' but accepts L1 and L2 with different lengths, and stop as soon
+as a list is exhausted."
+  (loop for e1 in l1
+        for e2 in l2
+        collect (cons e1 e2)))
+
 ;;; Contexts
 ;;;
 ;;; Contexts are  global variables that are  filled during the export.  They are
@@ -797,7 +805,7 @@ name resolution"
             (pprint-newline :fill stream)
             ;; Perhaps a processing will be necessary if `args’ `dom’ do not
             ;; have same length (in case of partial application)
-            (pprint-logical-block (stream (pairlis args dom))
+            (pprint-logical-block (stream (pairlis* args dom))
               (let* ((args-ty (pprint-pop))
                      (args (car args-ty))
                      (ty (cdr args-ty)))
