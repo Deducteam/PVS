@@ -19,6 +19,8 @@ output=""
 specification=""
 verbose=3
 
+specdir=""
+
 USAGE="[-author?Gabriel Hondet <gabriel.hondet@inria.fr>]"
 USAGE+="[+NAME?pvs2dk.sh --- Translate a PVS specification to Dedukti]"
 USAGE+="[+DESCRIPTION?Parse and proofcheck a theory in PVS to translate it
@@ -50,7 +52,9 @@ while getopts "${USAGE}" o; do
         f) file="${OPTARG}" ;;
         t) theory="${OPTARG}" ;;
         o) output="${OPTARG}" ;;
-        s) specification="${OPTARG}" ;;
+        s) specification="${OPTARG}"
+           specdir="$(dirname "${specification}")"
+           ;;
         v) verbose="${OPTARG}"
     esac
 done
@@ -59,14 +63,14 @@ translate() {
     # Translate pvs files when using specification.
     file="$1"  thy="$2"
     $PVS -batch -q -v "${verbose}" -l "${PVSWRAP}" -- \
-        "${file}" "${thy}" "${thy}.lp"
+        "${file}" "${thy}" "${specdir}/${thy}.lp"
 }
 
 if [[ -z "${specification}" ]]; then
     $PVS -batch -q -v "${verbose}" -l "${PVSWRAP}" -- \
         "${file}" "${theory}" "${output}"
 else
-    LC=1
+    LC=1 # Line count
     while read -r line; do
         if (print -f "$line" | grep -E -q '^<'); then
             file="${line:1}"
