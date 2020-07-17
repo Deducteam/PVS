@@ -188,9 +188,10 @@ cell."
            (pack-type (l)
              "Make a `bind-decl' out of L, either by taking the `car' or
 creating a variable."
+             (declare (type list l))
              (if (= 1 (length l))
                  (let ((elt (car l)))
-                   (make-bind-decl (id l) (type-with-ctx l)))
+                   (make-bind-decl (id elt) (type-with-ctx elt)))
                  (let ((var (intern (fresh-var :prefix "tup")))
                        (typ (make-tupletype (mapcar #'type-with-ctx l))))
                    (make-bind-decl var typ))))
