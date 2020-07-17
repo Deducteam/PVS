@@ -10,7 +10,7 @@
 set -eufo pipefail
 
 # Get pvs executable from path, else just call pvs
-PVS="${PVS:-pvs}"
+PVS="${PVS:-./pvs}"
 PVSWRAP="translations/pvs2dkwrap.el"
 
 theory=""
@@ -62,8 +62,12 @@ done
 translate() {
     # Translate pvs files when using specification.
     file="$1"  thy="$2"
-    $PVS -batch -q -v "${verbose}" -l "${PVSWRAP}" -- \
-        "${file}" "${thy}" "${specdir}/${thy}.lp"
+    output="$(${PVS} -batch -q -v "${verbose}" -l "${PVSWRAP}" -- \
+        "${file}" "${thy}" "${specdir}/${thy}.lp")"
+    if (print "${output}" | grep -q 'debugger invoked'); then
+        printf '[%s#%s]: Error\n' "${file}" "${thy}"
+        exit 1
+    fi
 }
 
 if [[ -z "${specification}" ]]; then
