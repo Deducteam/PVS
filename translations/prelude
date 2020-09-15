@@ -33,20 +33,20 @@ measure_induction
 epsilons
 decl_params
 sets
-sets_lemmas
+#sets_lemmas # Module is nil, weird
 function_inverse_def
 function_inverse
 # Requires `assuming' processing
 #function_inverse_alt
-#function_image
-#function_props
-#function_props_alt
-#function_props2
-#relation_defs
-#relation_props
-#relation_props2
-#relation_converse_props
-#indexed_sets
+function_image
+function_props
+function_props_alt
+function_props2
+relation_defs
+relation_props
+relation_props2
+relation_converse_props
+indexed_sets
 #operator_defs
 #
 #numbers
