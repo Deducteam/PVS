@@ -1,3 +1,4 @@
+% Unit tests for translator
 simple: THEORY
 BEGIN
   % Basic
@@ -148,3 +149,12 @@ tfrom[t: TYPE, u: TYPE FROM t]: THEORY
 BEGIN
   value: u
 END tfrom
+
+exprastype: THEORY
+BEGIN
+  t: TYPE
+  rec?: [t -> bool]
+  thevalue : (rec?)
+  etaexpanded: (LAMBDA (u: t): (rec?(u)))
+  func : [(rec?) -> bool]
+END exprastype

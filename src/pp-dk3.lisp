@@ -154,10 +154,11 @@ psub u_pred.")
   `(destructuring-bind (,larg ,rarg &rest _) (exprs (argument ,binapp))
      ,@body))
 
-(defun print-debug (ind)
+(defun print-debug (ind &optional obj)
   "Prints debug information on standard output with IND an indication (typically
 a function name from where the debug is called)."
   (format t "~%~a:" ind)
+  (format t "~%~a:" obj)
   (format t "~%  tct:~i~<~a~:>" (list *ctx-thy*))
   (format t "~%  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
@@ -370,8 +371,8 @@ stream STREAM."
 (declaim (ftype (function (symbol integer integer stream) null)
                 pprint-proj-spec))
 (defun pprint-proj-spec (var index len stream)
-  "Print the INDEXth projection of VAR on stream STREAM.
-`pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
+  "Print the INDEXth projection of VAR being a tuple of length LEN on stream
+STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
   (labels ((projs-of-ind (ind len)
              "Transform a projection in a list into a succession of `fst' and
 `snd' projections."
@@ -693,7 +694,7 @@ See parse.lisp:826"
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
-  (print-debug "subtype")
+  (print-debug "subtype" te)
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -706,9 +707,22 @@ See parse.lisp:826"
         (pp-dk stream predicate t at-sign-p)))))
 
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
-  "Used in e.g. (equivalence?)"
-  (print-debug "expr-as-type")
-  (pp-dk stream (expr te) colon-p at-sign-p))
+  "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
+type."
+  (print-debug "expr-as-type" te)
+  (let* ((e (expr te)))
+    (describe e)
+    (with-parens (stream colon-p)
+      (pprint-logical-block (stream nil)
+        (write-string "psub " stream)
+        (pp-dk stream e t at-sign-p)))))
+
+(defmethod pp-dk (stream (te simple-expr-as-type) &optional colon-p at-sign-p)
+  "Used in e.g. (equivalence?) without inheriting subtypes. I don't know when it
+can be used."
+  (print-debug "simpl-expr-as-type" te)
+  (with-slots (expr) te
+    (pp-dk stream expr colon-p at-sign-p)))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM."
@@ -816,6 +830,14 @@ name resolution"
                          t))
               (pprint-exit-if-list-exhausted)
               (write-char #\space stream)))))))
+
+(defmethod pp-dk (stream (ex projection-application)
+                  &optional colon-p at-sign-p)
+  "For projections of the form t`2."
+  (print-debug "projection-application")
+  (with-slots (id index argument) ex
+    ;; (pprint-proj-spec argument index (tuple-length argument) stream)
+    (error "Projections not yet implemented.")))
 
 (defmethod pp-dk (stream (ex tuple-expr) &optional colon-p at-sign-p)
   (print-debug "tuple-expr")
