@@ -596,9 +596,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (print-debug "def-decl")
   (with-slots (id definition formals type) decl
-    (let ((form-spec (pack-arg-tuple formals))
-          (*packed-tuples* (cdr form-spec))
-          (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
+    (let* ((form-spec (pack-arg-tuple formals))
+           (*packed-tuples* (cdr form-spec))
+           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
       (format stream "// Recursive declaration ~a~%" id)
       (pprint-logical-block (stream nil)
         (format stream "symbol ~/pvs:pp-sym/: " id)
