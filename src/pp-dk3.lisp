@@ -395,8 +395,9 @@ STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
   "Print a casting of `car' of AT to type `cdr' of AT."
   (print-debug "pp-cast")
   (with-parens (stream colon-p)
+    ;; We print (λx, x) as a valid proof of type compatibility
     (format stream
-            "cast ~:[~;{_} ~]~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ _"
+            "cast ~:[~;{_} ~]~:/pvs:pp-dk/ (λx, x) ~:/pvs:pp-dk/ _"
             *explicit* (cdr at) (car at))))
 
 ;;; Main printing
