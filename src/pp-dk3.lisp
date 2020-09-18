@@ -255,7 +255,7 @@ binding is automatically removed from the context thanks to dynamic scoping."
       ((pprint-binding (id dtype)
          (declare (type symbol id))
          (declare (type type-expr type))
-         (let ((dec (if (is-*type*-p dtype) "θ" "η")))
+         (let ((dec (if (is-*type*-p dtype) "θ" "El")))
            (format stream "~<(~/pvs:pp-sym/: ~:_~a ~:/pvs:pp-dk/)~:>"
                    (list id dec dtype))))
        (pprint-abstraction* (term bindings)
@@ -559,7 +559,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream " ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
-          (write-string "ε " stream)
+          (write-string "Prf " stream)
           (pprint-prenex defn 'bool stream t))
         (fresh-line stream)
         (setf *signature* (cons id *signature*))
