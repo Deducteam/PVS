@@ -262,6 +262,7 @@ binding is automatically removed from the context thanks to dynamic scoping."
              (pprint-newline :fill stream)
              (let ((dec (if (is-*type*-p dtype) "θ" "El")))
                (write-string dec stream))
+             (write-char #\space stream)
              (pp-dk stream dtype t))))
        (pprint-abstraction* (term bindings)
          "Print term TERM abstracting on bindings BINDINGS. Bindings are
