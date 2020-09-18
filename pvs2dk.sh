@@ -80,6 +80,7 @@ else
             file="${line:1}"
             printf 'Reading from PVS source file: %s\n' "${file}"
         elif (print -f "${line}" | grep -E -q '^#'); then
+            ((LC++))
             continue
         elif (print -f "${line}" | grep -E -q '^[a-zA-Z][a-zA-Z0-9_\?]+$')
         then
