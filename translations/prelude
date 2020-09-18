@@ -48,7 +48,6 @@ relation_props2
 relation_converse_props
 indexed_sets
 operator_defs
-#
 numbers
 number_fields
 reals
@@ -61,76 +60,76 @@ integers
 #naturalnumbers
 min_nat
 #real_defs # Error on application judgement
-real_props
-#extra_real_props
-#extra_tegies
-#rational_props
-#integer_props
-#floor_ceil
+real_props # Very long to translate, but works
+extra_real_props
+extra_tegies
+rational_props
+integer_props
+floor_ceil
 #exponentiation # Contains a recursive function definition
-#euclidean_division
-#divides
-#modulo_arithmetic
-#subrange_inductions
-#bounded_int_inductions
-#bounded_nat_inductions
-#subrange_type
-#int_types
-#nat_types
-#nat_fun_props
-#finite_sets
-#restrict_set_props
-#extend_set_props
-#function_image_aux
-#function_iterate
-#sequences
-#seq_functions
-#finite_sequences
-#more_finseq
+euclidean_division
+divides
+modulo_arithmetic
+subrange_inductions
+bounded_int_inductions
+bounded_nat_inductions
+subrange_type
+int_types
+nat_types
+nat_fun_props
+finite_sets
+restrict_set_props
+extend_set_props
+function_image_aux
+function_iterate
+sequences
+seq_functions
+finite_sequences
+more_finseq
 #ordstruct # Is a Datatype
-#ordinals
-#lex2
-#lex3
-#lex4
+ordinals
+lex2
+lex3
+lex4
 #list # Is a datatype
 #list_props # Recursive function
-#map_props
-#more_map_props
+map_props
+more_map_props
 #filters # Recursive functions
-#list2finseq
+list2finseq
 #list2set # Recursive functions
 #disjointess # Recursive functions
 #character # Is datatype
-#strings
+strings
 #lift # Is a datatype
 #union # Datatype
-#mucalculus
-#ctlops
-#fairctlops
+mucalculus
+ctlops
+fairctlops
 #Fairctlops # Recursive functions
-#bit
-#bv
+bit
+bv
 #exp2 # Recursive functions
-#bv_concat_def
-#bv_bitwise
+bv_concat_def
+bv_bitwise
 #bv_nat # Recursive
-#empty_bv
-#bv_caret
-#mod
-#bv_arith_nat_defs
-#bv_int_defs
+empty_bv
+bv_caret
+mod
+bv_arith_nat_defs
+bv_int_defs
 #bv_arithmetic_defs # Recursive functions
-#bv_extend_defs
-#integertypes
-#infinite_sets_def
+bv_extend_defs
+integertypes
+infinite_sets_def
 #finite_sets_of_sets # Recursive functions
-#EquivalenceClosure
-#QuotientDefinition
-#KernelDefinition
-#QuotientKernelProperties
-#QuotientSubDefinition
-#QuotientExtensionProperties
-#QuotientDistributive
-#QuotientIteration
-#PartialFunctionDefinitions
-#PartialFunctionComposition
+EquivalenceClosure
+QuotientDefinition
+KernelDefinition
+QuotientKernelProperties
+QuotientSubDefinition
+QuotientExtensionProperties
+QuotientDistributive
+QuotientIteration
+PartialFunctionDefinitions
+PartialFunctionComposition
