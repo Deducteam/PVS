@@ -60,7 +60,8 @@ integers
 naturalnumbers
 min_nat
 #real_defs # Error on application judgement
-real_props # Very long to translate, but works
+# real_props is very long to translate
+real_props
 extra_real_props
 extra_tegies
 rational_props
