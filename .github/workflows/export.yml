@@ -55,23 +55,11 @@ jobs:
 
     - name: toy examples
       run: |
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t simple
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t prenex
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t thyparams
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t import
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t vector
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t vector_ops
-        PVS=./pvs ./pvs2dk.sh -f lib/simple -t linear_form
+        PVS=./pvs ./pvs2dk.sh -s translations/simple
 
     - name: prelude grand schelem
       run: |
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t booleans
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t boolean_props
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t xor_def
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t quantifier_props
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t defined_types
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t operator_defs
-        PVS=./pvs ./pvs2dk.sh -f lib/prelude -t orders
+        PVS=./pvs ./pvs2dk.sh -s translations/prelude
 
     - name: type check
       run: |
@@ -88,4 +76,4 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: lp-exports
-        path: /tmp/pvs/*.lp
+        path: translations/*.lp
