@@ -18,8 +18,24 @@ jobs:
         sudo apt install --yes emacs ksh
         url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
         (cd ${HOME} || exit 1
-        curl "$url" -L | tar -jx
+        curl "$url" -L | tar jx
         ln -s sbcl* sbcl)
+
+    - name: compile pvs
+      run: |
+        autoconf
+        ./configure
+        export EMACS="$(command -v emacs)"
+        export SBCLISP_HOME="${HOME}/sbcl"
+        make >output 2>&1
+
+    - name: toy examples
+      run: |
+        PVS=./pvs ./pvs2dk.sh -s translations/simple
+
+    - name: prelude grand schelem
+      run: |
+        PVS=./pvs ./pvs2dk.sh -s translations/prelude
 
     - name: lambdapi install
       run: |
@@ -44,22 +60,6 @@ jobs:
         (cd personoj || exit 1
         eval $(opam env)
         make install)
-
-    - name: compile pvs
-      run: |
-        autoconf
-        ./configure
-        export EMACS="$(command -v emacs)"
-        export SBCLISP_HOME="${HOME}/sbcl"
-        make >output 2>&1
-
-    - name: toy examples
-      run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/simple
-
-    - name: prelude grand schelem
-      run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/prelude
 
     - name: type check
       run: |
