@@ -158,3 +158,13 @@ BEGIN
   etaexpanded: (LAMBDA (u: t): (rec?(u)))
   func : [(rec?) -> bool]
 END exprastype
+
+depsubtype: THEORY
+BEGIN
+  T: TYPE
+  i: VAR T
+  pre: [T, T -> bool]
+  subt(i) : TYPE = {s: T | pre(i, s)}
+  another_pred: [T -> bool]
+  ax: AXIOM FORALL(n: T)(x: subt(n)): another_pred(x)
+END depsubtype

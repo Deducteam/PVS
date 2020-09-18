@@ -725,13 +725,19 @@ can be used."
     (pp-dk stream expr colon-p at-sign-p)))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
-  "Prints type application TE to stream STREAM."
-  (print "type app")
+  "Prints type application TE to stream STREAM. Used for instance with dependent
+(sub)types `subt(i)` where `subt(i) = {x: ... | f(i)}`."
+  (print-debug "type-application" te)
   (with-slots (type parameters) te
-    (when colon-p (format stream "("))
-    (format stream "~<~/pvs:pp-dk/ ~i~:_~{/pvs:pp-dk/~^ ~}~:>"
-            (list type parameters))
-    (when colon-p (format stream ")"))))
+    (with-parens (stream colon-p)
+      (pp-dk stream type t)
+      (write-char #\space stream)
+      (pprint-logical-block (stream parameters)
+        (pprint-indent :block 2 stream)
+        (pprint-newline :fill stream)
+        (pp-dk stream (pprint-pop) t)
+        (pprint-exit-if-list-exhausted)
+        (write-char #\space stream)))))
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
