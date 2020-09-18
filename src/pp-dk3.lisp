@@ -254,10 +254,15 @@ binding is automatically removed from the context thanks to dynamic scoping."
   (labels
       ((pprint-binding (id dtype)
          (declare (type symbol id))
-         (declare (type type-expr type))
-         (let ((dec (if (is-*type*-p dtype) "θ" "El")))
-           (format stream "~<(~/pvs:pp-sym/: ~:_~a ~:/pvs:pp-dk/)~:>"
-                   (list id dec dtype))))
+         (declare (type type-expr dtype))
+         (with-parens (stream t)
+           (pprint-logical-block (stream nil)
+             (pp-sym stream id)
+             (write-string ": " stream)
+             (pprint-newline :fill stream)
+             (let ((dec (if (is-*type*-p dtype) "θ" "El")))
+               (write-string dec stream))
+             (pp-dk stream dtype t))))
        (pprint-abstraction* (term bindings)
          "Print term TERM abstracting on bindings BINDINGS. Bindings are
 typed if they were typed in PVS (they may be typed by a variable declaration)."
@@ -267,9 +272,11 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
              (format stream ", ~:_~/pvs:pp-dk/" term)
              (with-slots (id type declared-type) (car bindings)
                (if declared-type
-                   (let* ((*ctx* (acons id declared-type *ctx*)))
+                   (progn
                      (pprint-binding id declared-type)
-                     (pprint-abstraction* term (cdr bindings)))
+                     (let* ((*ctx* (acons id declared-type *ctx*)))
+                       ;; Print the body with the variable in context
+                       (pprint-abstraction* term (cdr bindings))))
                    ;; Otherwise, the variable is already declared
                    (progn
                      (pprint-binding id (cdr (assoc id *ctx*)))

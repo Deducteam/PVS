@@ -57,7 +57,7 @@ bounded_real_defs_alt
 real_types
 rationals
 integers
-#naturalnumbers
+naturalnumbers
 min_nat
 #real_defs # Error on application judgement
 real_props # Very long to translate, but works
@@ -121,7 +121,7 @@ bv_int_defs
 #bv_arithmetic_defs # Recursive functions
 bv_extend_defs
 integertypes
-infinite_sets_def
+# infinite_sets_def # Macros
 #finite_sets_of_sets # Recursive functions
 EquivalenceClosure
 QuotientDefinition
