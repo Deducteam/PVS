@@ -132,5 +132,5 @@ QuotientSubDefinition
 QuotientExtensionProperties
 QuotientDistributive
 QuotientIteration
-PartialFunctionDefinitions
-PartialFunctionComposition
+#PartialFunctionDefinitions # Contains a record
+#PartialFunctionComposition # Depends on previous thy
