@@ -643,18 +643,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
                   &optional colon-p at-sign-p)
   "Print the judgement. A TCC is generated with the same `id'.
 See parse.lisp:826"
-  (print "application-judgement")
+  (print-debug "application-judgement" decl)
   (with-slots (id formals declared-type judgement-type name) decl
-    (format stream "// Application judgement~%")
-    (let* ((form-spec (pack-arg-tuple formals))
-           (*packed-tuples* (cdr form-spec))
-           (term (make!-application name (car form-spec))))
-      (format stream "// @cast _ ~:/pvs:pp-dk/ _ ~:/pvs:pp-dk/ P :-~&"
-              declared-type term)
-      (let* ((hd (make-instance 'name-expr :id id)) ; Unsafe here
-             (uterm (make-instance 'application :operator hd
-                                                :argument (car form-spec))))
-        (format stream "//   P = ~/pvs:pp-dk/.~&" uterm)))))
+    (format stream "// Application judgement \"~a\"~%" id)))
 
 
 (defmethod pp-dk (stream (decl expr-judgement) &optional colon-p _at-sign-p)
