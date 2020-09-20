@@ -85,8 +85,8 @@ function_image_aux
 function_iterate
 sequences
 seq_functions
-finite_sequences # Use dependent records
-more_finseq # Depends on finite_sequences
+#finite_sequences # Use dependent records
+#more_finseq # Depends on finite_sequences
 #ordstruct # Is a Datatype
 ordinals
 lex2
