@@ -838,12 +838,13 @@ name resolution"
               (write-char #\space stream)))))))
 
 (defmethod pp-dk (stream (ex projection-application)
-                  &optional colon-p at-sign-p)
+                  &optional _colon-p _at-sign-p)
   "For projections of the form t`2."
-  (print-debug "projection-application")
+  (print-debug "projection-application" ex)
   (with-slots (id index argument) ex
-    ;; (pprint-proj-spec argument index (tuple-length argument) stream)
-    (error "Projections not yet implemented.")))
+    (let ((len (length (types (type argument))))
+          (ident (id argument)))
+      (pprint-proj-spec ident index len stream))))
 
 (defmethod pp-dk (stream (ex tuple-expr) &optional colon-p at-sign-p)
   (print-debug "tuple-expr")
