@@ -88,20 +88,20 @@ seq_functions
 #finite_sequences # Use dependent records
 #more_finseq # Depends on finite_sequences
 #ordstruct # Is a Datatype
-ordinals
-lex2
-lex3
-lex4
+#ordinals # Recursive function
+#lex2 # Depends on ordinals
+#lex3 # Depends on ordinals
+#lex4 # Depends on ordinals
 #list # Is a datatype
 #list_props # Recursive function
 map_props
 more_map_props
 #filters # Recursive functions
-list2finseq
-#list2set # Recursive functions
+#list2finseq # Depends on list
+#list2set # Recursive functions, depends on list
 #disjointess # Recursive functions
 #character # Is datatype
-strings
+#strings # Depends on finite_sequence
 #lift # Is a datatype
 #union # Datatype
 mucalculus
