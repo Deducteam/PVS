@@ -638,7 +638,13 @@ is returned. ACC contains all symbols before E (in reverse order)."
   "AUTO_REWRITE, there are auto-rewrite-(plus|minus)-decl as well."
   (format stream "// Auto rewrite ~/pvs:pp-sym/" (id decl)))
 
-;; TODO
+;;; Judgements
+;; TODO: they are only comments for now
+
+(defmethod pp-dk (stream (decl name-judgement) &optional colon-p at-sign-p)
+  (with-slots (name) decl
+    (format stream "// Name judgement \"~a\"." name)))
+
 (defmethod pp-dk (stream (decl application-judgement)
                   &optional colon-p at-sign-p)
   "Print the judgement. A TCC is generated with the same `id'.
