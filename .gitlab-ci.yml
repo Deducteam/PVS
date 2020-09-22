@@ -1,4 +1,8 @@
+include:
+    - template: 'Workflows/Branch-Pipelines.gitlab-ci.yml'
+
 image: alpine:edge
+
 before_script:
     - apk add --no-cache emacs ksh
     - |
