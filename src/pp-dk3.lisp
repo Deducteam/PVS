@@ -398,16 +398,6 @@ STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
                    (pprint-projs (cdr ps))))))
     (pprint-projs (projs-of-ind index len))))
 
-(declaim (ftype (function (stream (cons expr type-expr) * *) null) pp-cast))
-(defun pp-cast (stream at &optional colon-p _at-sign-p)
-  "Print a casting of `car' of AT to type `cdr' of AT."
-  (print-debug "pp-cast")
-  (with-parens (stream colon-p)
-    ;; We print (λx, x) as a valid proof of type compatibility
-    (format stream
-            "cast ~:[~;{_} ~]~:/pvs:pp-dk/ (λx, x) ~:/pvs:pp-dk/ _"
-            *explicit* (cdr at) (car at))))
-
 ;;; Main printing
 
 (declaim (ftype (function (stream syntax * *) null)))
@@ -812,9 +802,8 @@ name resolution"
   (pp-quantifier stream ex colon-p at-sign-p "∀"))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p _at-sign-p)
-  "Print application EX, applying casts to the arguments. The expression EX
-``f(e1,e2)(g1,g2)'' will be printed as
-``f (cast t _ (σcons e1 e2) _) (cast u _ (σcons g1 g2) _)''."
+  "Print application EX. The expression EX ``f(e1,e2)(g1,g2)'' will be printed
+as ``f (σcons e1 e2) (σcons g1 g2)''."
   (print-debug "application")
   (if (null (type ex))
       ;; For some reason, application-judgements end up as application
@@ -832,14 +821,16 @@ name resolution"
             ;; Perhaps a processing will be necessary if `args’ `dom’ do not
             ;; have same length (in case of partial application)
             (pprint-logical-block (stream (pairlis* args dom))
+              ;; REVIEW: we certainly do not need all the variables introduced
+              ;; in the `let', sureley `args' is enough.
               (let* ((args-ty (pprint-pop))
                      (args (car args-ty))
                      (ty (cdr args-ty)))
-                (pp-cast stream
-                         (if (<= 2 (length args))
-                             (cons (make!-tuple-expr args) ty)
-                             (cons (car args) ty))
-                         t))
+                (pp-dk stream
+                       (if (<= 2 (length args))
+                           (make!-tuple-expr args)
+                           (car args))
+                       t))
               (pprint-exit-if-list-exhausted)
               (write-char #\space stream)))))))
 
