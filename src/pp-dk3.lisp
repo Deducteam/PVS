@@ -499,19 +499,17 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (print "type decl")
   (with-slots (id) decl
     (pprint-logical-block (stream nil)
-      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_ϕ " id)
+      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_El_k " id)
       (pprint-prenex *type* 'kind stream t))
     (fresh-line stream)
-    (setf *signature* (cons id *signature*))
-    (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/~%" id id)
-    (format stream "rule π {~/pvs:pp-sym/} ↪ λ_, true" id)))
+    (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x."
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
-      (format stream "definition ~/pvs:pp-sym/: ϕ " id)
+      (format stream "definition ~/pvs:pp-sym/: El_k " id)
       (pprint-prenex *type* 'kind stream t)
       (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
@@ -531,7 +529,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "definition ~/pvs:pp-sym/: " id)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
-      (write-string "ϕ " stream)
+      (write-string "El_k " stream)
       (pprint-prenex *type* 'kind stream t)
       (write-string " ≔ " stream)
       (pprint-newline :fill stream)
@@ -580,7 +578,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
             (format stream "definition ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
-            (write-string "χ " stream)
+            (write-string "El_s " stream)
             (pprint-prenex type 'set stream t)
             (write-string " ≔ " stream)
             (pprint-newline :fill stream)
@@ -589,7 +587,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
-          (write-string "χ " stream)
+          (write-string "El_s " stream)
           (pprint-prenex type 'set stream t)))
     (setf *signature* (cons id *signature*))))
 
@@ -604,7 +602,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (format stream "symbol ~/pvs:pp-sym/: " id)
         (pprint-indent :block 2 stream)
         (pprint-newline :fill stream)
-        (write-string "χ " stream)
+        (write-string "El_s " stream)
         (pprint-prenex type 'set stream t)
         (pprint-newline :mandatory stream))
       (setf *signature* (cons id *signature*))
@@ -960,10 +958,7 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
   (print "number-expr")
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
-  (with-parens (stream colon-p)
-    (with-slots (type number) ex
-      (format stream "~<cast ~i~:_~:/pvs:pp-dk/ ~:__ ~d _~:>"
-              (list type number)))))
+  (format stream "~d" number))
 
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
