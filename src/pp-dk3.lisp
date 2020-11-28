@@ -16,9 +16,6 @@
 (deftype polylist (ty)
   `(or (cons ,ty list) null))
 
-(defparameter *explicit* nil
-  "Set to non-nil avoid using implicits.")
-
 (declaim (type (cons (cons symbol symbol) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
   `((|boolean| . bool) (|bool| . bool) (|type| . ,(intern "{|set|}"))
@@ -260,7 +257,7 @@ binding is automatically removed from the context thanks to dynamic scoping."
              (pp-sym stream id)
              (write-string ": " stream)
              (pprint-newline :fill stream)
-             (let ((dec (if (is-*type*-p dtype) "θ" "El")))
+             (let ((dec (if (is-*type*-p dtype) "Ty" "El")))
                (write-string dec stream))
              (write-char #\space stream)
              (pp-dk stream dtype t))))
@@ -692,11 +689,11 @@ See parse.lisp:826"
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
-        (write-string "psub " stream)
+        (write-string "@psub " stream)
         (pprint-indent :block 0 stream)
-        (when (and *explicit* supertype)
-          (format stream "{~/pvs:pp-dk/} " supertype)
-          (pprint-indent :block 5 stream))
+        ;; REVIEW: can the supertype be `nil'?
+        (format stream "~/pvs:pp-dk/ " supertype)
+        (pprint-indent :block 6 stream)
         (pprint-newline :fill stream)
         (pp-dk stream predicate t at-sign-p)))))
 
@@ -876,77 +873,83 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
   "/=(A, B)"
   (print "disequation")
   (with-parens (stream colon-p)
-    (format stream "~<neq ~i~:_~{~:/pvs:pp-dk/~^ ~:_~}~:>" (argument ex))))
-
-(defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
-  "a /= b"
-  (print "infix-disequation")
-  (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<~:/pvs:pp-dk/ ≠ ~i~:_~:/pvs:pp-dk/~:>"
-              (list argl argr)))))
+      (format stream "@neq _ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" argl argr))))
+
+;; (defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
+;;   "a /= b"
+;;   (print "infix-disequation")
+;;   (with-parens (stream colon-p)
+;;     (with-binapp-args (argl argr ex)
+;;       (format stream "~<~:/pvs:pp-dk/ ≠ ~i~:_~:/pvs:pp-dk/~:>"
+;;               (list argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
   (print "equation")
   (with-parens (stream colon-p)
-    (format stream "~<eq ~i~{~:/pvs:pp-dk/~^ ~:_~}~:>" (argument ex))))
-
-(defmethod pp-dk (stream (ex infix-equation) &optional colon-p at-sign-p)
-  "a = b"
-  (print "infix-equation")
-  (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<~:/pvs:pp-dk/ = ~i~:_~:/pvs:pp-dk/~:>"
-              (list argl argr)))))
+      ;; Retrieve the domain of equality
+      (let* ((eq-ty (type (operator ex)))
+             (dom (domain eq-ty)))
+       (format stream "@eq ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+               dom argl argr)))))
+
+;; (defmethod pp-dk (stream (ex infix-equation) &optional colon-p at-sign-p)
+;;   "a = b"
+;;   (print "infix-equation")
+;;   (with-parens (stream colon-p)
+;;     (with-binapp-args (argl argr ex)
+;;       (format stream "~<~:/pvs:pp-dk/ = ~i~:_~:/pvs:pp-dk/~:>"
+;;               (list argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
   (print "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<and ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)~:>"
-              (list argl (fresh-var) argr)))))
+      (format stream "and ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
   "A AND B"
   (print "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<~:/pvs:pp-dk/ ∧ ~i~:_(λ~a, ~/pvs:pp-dk/)~:>"
-              (list argl (fresh-var) argr)))))
+      (format stream "~:/pvs:pp-dk/ ∧ ~i~:_(λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
   "OR(A, B)"
   (print "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<or ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)~:>"
-              (list argl (fresh-var) argr)))))
+      (format stream "or ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
   "A OR B"
   (print "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<~:/pvs:pp-dk/ ∨ ~i~:_(λ~a, ~/pvs:pp-dk/)~:>"
-              (list argl (fresh-var) argr)))))
+      (format stream "~:/pvs:pp-dk/ ∨ ~i~:_(λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
   (print "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<imp ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)~:>"
-              (list argl (fresh-var) argr)))))
+      (format stream "imp ~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
   "A IMPLIES B"
   (print "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~<~:/pvs:pp-dk/ ⊃ ~i~:_(λ~a, ~/pvs:pp-dk/)~:>"
-              (list argl (fresh-var) argr)))))
+      (format stream "~:/pvs:pp-dk/ ⊃ ~i~:_(λ~a, ~/pvs:pp-dk/)"
+              argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex negation) &optional colon-p _at-sign-p)
   "NOT(A), there is also a `unary-negation' that represents NOT A."
