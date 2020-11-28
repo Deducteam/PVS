@@ -33,8 +33,8 @@ the symbols with a module id.")
     (let ((*print-pretty* t)
           (*print-right-margin* 78))
       (loop for m in
-            '(|lhol| |pvs_cert| |subtype| |bool_hol| |builtins| |prenex|
-              |unif_rules| |deptype| |pairs|)
+            '(|lhol| |pvs_cert| |logical| |builtins| |prenex|
+              |deptype| |pairs|)
             do (pprint-reqopen m stream "personoj.encodings")
             do (fresh-line stream))
       (pp-dk stream obj))))
