@@ -961,7 +961,7 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
   (print "number-expr")
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
-  (format stream "~d" number))
+  (format stream "~d" ex))
 
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
