@@ -49,6 +49,23 @@ BEGIN
   succ_nz: JUDGEMENT succ(n: nznat) HAS_TYPE nznat
 END simple
 
+eqtype: THEORY
+BEGIN
+  % Check how the equality is typed
+  iota: TYPE % a type
+  p: [iota -> bool] % a predicate on this type
+  subiota : TYPE = (p) % a subtype of iota
+  xi, yi : iota
+  xsi, ysi : subiota
+  iniota : AXIOM xi = yi
+  insubiota : AXIOM xsi = ysi
+  mixed : AXIOM xi = ysi
+  % The conclusion is that in all cases, the equality is of type
+  % [iota, iota -> iota],
+  % so both arguments are typed as the supertype of the two arguments. Even in
+  % the case [xsi = ysi].
+END eqtype
+
 tupfun: THEORY
 BEGIN
   x, y: VAR boolean
