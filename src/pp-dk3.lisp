@@ -691,8 +691,9 @@ See parse.lisp:826"
       (pprint-logical-block (stream nil)
         (write-string "@psub " stream)
         (pprint-indent :block 0 stream)
+        (pprint-newline :fill stream)
         ;; REVIEW: can the supertype be `nil'?
-        (format stream "~/pvs:pp-dk/ " supertype)
+        (format stream "~:/pvs:pp-dk/ " supertype)
         (pprint-indent :block 6 stream)
         (pprint-newline :fill stream)
         (pp-dk stream predicate t at-sign-p)))))
