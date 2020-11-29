@@ -64,7 +64,7 @@ jobs:
     - name: type check
       run: |
         eval $(opam env)
-        cd translation || exit 1
+        cd translations || exit 1
         lambdapi init pvs
         cp *.lp pvs/
         cd pvs || exit 1
