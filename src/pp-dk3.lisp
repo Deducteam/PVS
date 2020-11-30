@@ -499,6 +499,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_El_k " id)
       (pprint-prenex *type* 'kind stream t))
     (fresh-line stream)
+    (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/" id id)
+    (fresh-line stream)
+    ;; No dynamic scoping because we never remove elements from the signature
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
