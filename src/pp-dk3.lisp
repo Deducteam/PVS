@@ -30,8 +30,8 @@ the symbols with a module id.")
     (let ((*print-pretty* t)
           (*print-right-margin* 78))
       (loop for m in
-            '(|lhol| |pvs_cert| |logical| |builtins| |prenex|
-              |deptype| |pairs|)
+            '(|lhol| |pvs_cert| |prenex| |pairs| |logical| |pair_equality|
+              |builtins| |deptype|)
             do (pprint-reqopen m stream "personoj.encodings")
             do (fresh-line stream))
       (pp-dk stream obj))))
@@ -817,12 +817,8 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
             (pprint-newline :fill stream)
             ;; Perhaps a processing will be necessary if `args’ `dom’ do not
             ;; have same length (in case of partial application)
-            (pprint-logical-block (stream (pairlis* args dom))
-              ;; REVIEW: we certainly do not need all the variables introduced
-              ;; in the `let', sureley `args' is enough.
-              (let* ((args-ty (pprint-pop))
-                     (args (car args-ty))
-                     (ty (cdr args-ty)))
+            (pprint-logical-block (stream args)
+              (let ((args (pprint-pop)))
                 (pp-dk stream
                        (if (<= 2 (length args))
                            (make!-tuple-expr args)
@@ -871,39 +867,35 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
         (format stream "~<(λ~a, ~1i~:_~/pvs:pp-dk/)~:>"
                 (list (fresh-var) else))))))
 
+;;; REVIEW: factorise disequation and equation
+
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
   (print "disequation")
   (with-parens (stream colon-p)
-    (with-binapp-args (argl argr ex)
-      (format stream "@neq _ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" argl argr))))
-
-;; (defmethod pp-dk (stream (ex infix-disequation) &optional colon-p at-sign-p)
-;;   "a /= b"
-;;   (print "infix-disequation")
-;;   (with-parens (stream colon-p)
-;;     (with-binapp-args (argl argr ex)
-;;       (format stream "~<~:/pvs:pp-dk/ ≠ ~i~:_~:/pvs:pp-dk/~:>"
-;;               (list argl argr)))))
+    (let* ((eq-ty (type (operator ex)))
+           (dom (types (domain eq-ty)))
+           (tyl (car dom))
+           (tyr (cadr dom)))
+      (assert (equal tyl tyr) (tyl tyr)
+              "Equality types ~S and ~S are not equal." tyl tyr)
+      (with-binapp-args (argl argr ex)
+        (format stream "@pneq ~:/pvs:pp-dk/ (σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+                tyl argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
   (print "equation")
   (with-parens (stream colon-p)
-    (with-binapp-args (argl argr ex)
-      ;; Retrieve the domain of equality
-      (let* ((eq-ty (type (operator ex)))
-             (dom (domain eq-ty)))
-       (format stream "@eq ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
-               dom argl argr)))))
-
-;; (defmethod pp-dk (stream (ex infix-equation) &optional colon-p at-sign-p)
-;;   "a = b"
-;;   (print "infix-equation")
-;;   (with-parens (stream colon-p)
-;;     (with-binapp-args (argl argr ex)
-;;       (format stream "~<~:/pvs:pp-dk/ = ~i~:_~:/pvs:pp-dk/~:>"
-;;               (list argl argr)))))
+    (let* ((eq-ty (type (operator ex)))
+           (dom (types (domain eq-ty)))
+           (tyl (car dom))
+           (tyr (cadr dom)))
+      (assert (equal tyl tyr) (tyl tyr)
+              "Equality types ~S and ~S are not equal." tyl tyr)
+      (with-binapp-args (argl argr ex)
+        (format stream "@peq ~:/pvs:pp-dk/ (σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+                tyl argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
