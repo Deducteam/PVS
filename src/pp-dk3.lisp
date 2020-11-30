@@ -702,12 +702,13 @@ See parse.lisp:826"
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
 type."
   (print-debug "expr-as-type" te)
-  (let* ((e (expr te)))
-    (describe e)
+  (with-slots (expr) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
-        (write-string "psub " stream)
-        (pp-dk stream e t at-sign-p)))))
+        ;; REVIEW: should get the domain of expression E and pass it as first
+        ;; argument of psub
+        (write-string "@psub _ " stream)
+        (pp-dk stream expr t at-sign-p)))))
 
 (defmethod pp-dk (stream (te simple-expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?) without inheriting subtypes. I don't know when it
