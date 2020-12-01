@@ -847,11 +847,15 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
       (cond
         ((= 2 (length exprs))
          (destructuring-bind (x y) exprs
-           (format stream "σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" x y)))
+           (format stream "@σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/
+~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+                   (type x) (type y) x y)))
         ((< 2 (length exprs))
          (destructuring-bind (hd &rest tl) exprs
-           (format stream "σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
-                   hd (make!-tuple-expr tl))))
+           (let ((argr (make!-tuple-expr tl)))
+             (format stream "@σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/
+~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+                     (type hd) (type argr) hd argr))))
         (t (error "Tuple ~a have too few elements." ex))))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
@@ -883,8 +887,9 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
       (assert (equal tyl tyr) (tyl tyr)
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
-        (format stream "@pneq ~:/pvs:pp-dk/ (σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
-                tyl argl argr)))))
+        (format stream "@pneq ~:/pvs:pp-dk/
+(@σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+                tyl tyl tyr argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
@@ -897,8 +902,9 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
       (assert (equal tyl tyr) (tyl tyr)
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
-        (format stream "@peq ~:/pvs:pp-dk/ (σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
-                tyl argl argr)))))
+        (format stream "@peq ~:/pvs:pp-dk/
+(@σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+                tyl tyl tyr argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"

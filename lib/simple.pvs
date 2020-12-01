@@ -11,6 +11,8 @@ BEGIN
   subt: TYPE FROM nat
 
   curryfication: [nat, [nat, nat -> nat] -> nat]
+  triple_proj(n: nat, m: nat, k: nat): nat
+  proj_trip_ax : AXIOM FORALL (n: nat): triple_proj(n, n, n) = n
 
   % Constant declaration
   one: nat = succ(zero)
