@@ -76,6 +76,11 @@ as a list is exhausted."
   "Context enriched by LAMBDA bindings and `var-decl'. Variable declarations
 `var-decl' are never removed from the context.")
 
+(declaim (type context *ctx-var*))
+(defparameter *ctx-var* nil
+  "Context enriched by `var-decl' only. Not typed bound variables of LAMBDAs
+seek their type into this context only (and not previous LAMBDA bindings).")
+
 (declaim (type context *ctx-local*))
 (defparameter *ctx-local* nil
   "Context used to translate rewriting definitions. Variables in this context
@@ -268,7 +273,7 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
          (declare (type (polylist bind-decl) bindings))
          (if (null bindings)
              (format stream ", ~:_~/pvs:pp-dk/" term)
-             (with-slots (id type declared-type) (car bindings)
+             (with-slots (id declared-type) (car bindings)
                (if declared-type
                    (progn
                      (pprint-binding id declared-type)
@@ -277,7 +282,10 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
                        (pprint-abstraction* term (cdr bindings))))
                    ;; Otherwise, the variable is already declared
                    (progn
-                     (pprint-binding id (cdr (assoc id *ctx*)))
+                     ;; If the type of the binding is not specified,
+                     ;; then the variable must be typed by a x: VAR t
+                     ;; declaration, and hence end up in `*ctx-var*'.
+                     (pprint-binding id (cdr (assoc id *ctx-var*)))
                      (pprint-abstraction* term (cdr bindings))))))))
     (if (null bindings)
         (pp-dk stream ex wrap)
@@ -415,7 +423,11 @@ of the theory REST with the new context in (dynamic) scope."
          (declare (type var-decl vd))
          (declare (type list rest))
          (with-slots (id declared-type) vd
-           (let ((*ctx* (acons id declared-type *ctx*)))
+           (let ((*ctx* (acons id declared-type *ctx*))
+                 ;; REVIEW: setting `*ctx*' may be useless. At least the
+                 ;; distinction between `*ctx*' and `*ctx-var*' is required,
+                 ;; see the documentation of `*ctx-var*'.
+                 (*ctx-var* (acons id declared-type *ctx-var*)))
              (pprint-decls rest))))
        (pprint-decls (decls)
          "Print declarations DECLS to stream STREAM. We use a special function
@@ -840,7 +852,7 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
       (pprint-proj-spec ident index len stream))))
 
 (defmethod pp-dk (stream (ex tuple-expr) &optional colon-p at-sign-p)
-  (print-debug "tuple-expr")
+  (print-debug "tuple-expr" ex)
   (with-slots (exprs) ex
     ;; Tuple types have at least 2 elements (PVS invariant)
     (with-parens (stream colon-p)
@@ -849,13 +861,13 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
          (destructuring-bind (x y) exprs
            (format stream "@σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/
 ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
-                   (type x) (type y) x y)))
+                   (type-of-expr x) (type-of-expr y) x y)))
         ((< 2 (length exprs))
          (destructuring-bind (hd &rest tl) exprs
            (let ((argr (make!-tuple-expr tl)))
              (format stream "@σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/
 ~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
-                     (type hd) (type argr) hd argr))))
+                     (type-of-expr hd) (type-of-expr argr) hd argr))))
         (t (error "Tuple ~a have too few elements." ex))))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to

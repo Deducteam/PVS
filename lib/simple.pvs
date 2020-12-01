@@ -68,6 +68,19 @@ BEGIN
   % the case [xsi = ysi].
 END eqtype
 
+decvar: THEORY
+BEGIN
+  iota: TYPE
+  omicron: TYPE
+  x: VAR omicron
+  y: omicron
+  eqio : AXIOM FORALL(x: iota)(x): x = y
+  % What we can see here is that the type of x in the equality is omicron,
+  % and not iota, even though the previous binding defines x to be of type
+  % iota. So the type of not annotated bound variables is *exclusively*
+  % sought from the declared variables.
+END decvar
+
 tupfun: THEORY
 BEGIN
   x, y: VAR boolean
