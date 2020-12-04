@@ -29,11 +29,14 @@ the symbols with a module id.")
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t)
           (*print-right-margin* 78))
-      (loop for m in
-            '(|lhol| |pvs_cert| |prenex| |pairs| |logical| |pair_equality|
-              |builtins| |deptype|)
-            do (pprint-reqopen m stream "personoj.encodings")
-            do (fresh-line stream))
+      (write-string "require open personoj.encodings.lhol
+require personoj.encodings.tuple as T
+require personoj.encodings.dtuple as Dt
+require open personoj.encodings.prenex personoj.encodings.logical
+  personoj.encodings.pvs_cert
+require personoj.encodings.equality_tup as Eqtup
+require open personoj.encodings.builtins personoj.encodings.deptype" stream)
+      (fresh-line stream)
       (pp-dk stream obj))))
 
 (declaim (type type-name *type*))
@@ -391,8 +394,8 @@ STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
 `snd' projections."
              (declare (type integer ind))
              (declare (type integer len))
-             (let ((snd-projs (make-list ind :initial-element "σsnd")))
-               (if (= ind (- len 1)) snd-projs (cons "σfst" snd-projs))))
+             (let ((snd-projs (make-list ind :initial-element "T.cdr")))
+               (if (= ind (- len 1)) snd-projs (cons "T.car" snd-projs))))
            (pprint-projs (ps)
              (declare (type (polylist string) ps))
              (if (null ps)
@@ -689,7 +692,7 @@ See parse.lisp:826"
   (with-slots (types) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
-        (write-string "σ " stream)
+        (write-string "T.t " stream)
         ;; Any tuple type has at least two elements
         (if (= 2 (length types))
             (destructuring-bind (s u) types
@@ -866,11 +869,11 @@ translation to scale up, because expressions become too verbose."
       (cond
         ((= 2 (length exprs))
          (destructuring-bind (x y) exprs
-           (format stream "σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" x y)))
+           (format stream "T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" x y)))
         ((< 2 (length exprs))
          (destructuring-bind (hd &rest tl) exprs
            (let ((argr (make!-tuple-expr tl)))
-             (format stream "σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" hd argr))))
+             (format stream "T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" hd argr))))
         (t (error "Tuple ~a have too few elements." ex))))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
@@ -902,7 +905,8 @@ translation to scale up, because expressions become too verbose."
       (assert (equal tyl tyr) (tyl tyr)
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
-        (format stream "@pneq ~:/pvs:pp-dk/ (σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+        (format stream
+                "@Eqtup.neq ~:/pvs:pp-dk/ (T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
                 tyl argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
@@ -916,7 +920,8 @@ translation to scale up, because expressions become too verbose."
       (assert (equal tyl tyr) (tyl tyr)
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
-        (format stream "@peq ~:/pvs:pp-dk/ (σcons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+        (format stream
+                "@Eqtup.eq ~:/pvs:pp-dk/ (T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
                 tyl argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
