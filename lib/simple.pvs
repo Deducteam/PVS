@@ -200,3 +200,11 @@ BEGIN
   another_pred: [T -> bool]
   ax: AXIOM FORALL(n: T)(x: subt(n)): another_pred(x)
 END depsubtype
+
+expandeddefs: THEORY
+BEGIN
+  iota: TYPE
+  rec?: [iota -> bool]
+  alpha: TYPE = {x: iota | rec?(x)}
+  f: [alpha -> alpha]
+END expandeddefs
