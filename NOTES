@@ -1,0 +1,4 @@
+To profile execution, build with --eval '(require :sb-sprof)' and wrap the body
+that must be profiled in
+
+(sb-sprof:with-profiling (:report :flat :loop nil) @body)
