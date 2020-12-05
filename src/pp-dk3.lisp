@@ -31,7 +31,7 @@ the symbols with a module id.")
           (*print-right-margin* 78))
       (write-string "require open personoj.encodings.lhol
 require personoj.encodings.tuple as T
-require personoj.encodings.dtuple as Dt
+require personoj.encodings.sum as S
 require open personoj.encodings.prenex personoj.encodings.logical
   personoj.encodings.pvs_cert
 require personoj.encodings.equality_tup as Eqtup
