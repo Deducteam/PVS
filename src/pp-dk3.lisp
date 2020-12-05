@@ -686,6 +686,14 @@ See parse.lisp:826"
 
 ;;; Type expressions
 
+(defmethod pp-dk :around (stream (te type-expr) &optional colon-p at-sign-p)
+  "Prints the printable type of type expr TE if it exists, or hand over to next
+method. If we do not use the PRINT-TYPE field, all predicate subtypes
+definitions are expanded, and the translation becomes too large."
+  (if (print-type te)
+      (pp-dk stream (print-type te) colon-p at-sign-p)
+      (call-next-method)))
+
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool] but also [bool, bool -> bool]"
   (print-debug "tuple-type")
