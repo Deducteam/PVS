@@ -18,7 +18,7 @@
 
 (declaim (type (cons (cons symbol symbol) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
-  `((|boolean| . bool) (|bool| . bool) (|type| . ,(intern "{|set|}"))
+  `((|boolean| . prop) (|bool| . prop) (|type| . ,(intern "{|set|}"))
     (true . true) (false . false))
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
