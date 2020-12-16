@@ -495,7 +495,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "// Theory ~a~%" id)
       (let ((prelude (mapcar #'id *prelude-theories*)))
         (loop for m in (up-to id prelude)
-              do (pprint-reqopen m stream "personoj.prelude")
+              do (pprint-reqopen m stream "pvs.prelude")
               do (fresh-line stream)))
       (process-formals formals-sans-usings theory))))
 
