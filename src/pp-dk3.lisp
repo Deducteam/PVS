@@ -524,7 +524,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
-      (format stream "definition ~/pvs:pp-sym/: El_k " id)
+      (format stream "symbol ~/pvs:pp-sym/: El_k " id)
       (pprint-prenex *type* 'kind stream t)
       (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
@@ -538,10 +538,11 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
-  (print "type from")
-  (with-slots (id type-value) decl
+  (print-debug "type from" decl)
+  (with-slots (id predicate supertype) decl
+    ;; PREDICATE is a type declaration
     (pprint-logical-block (stream nil)
-      (format stream "definition ~/pvs:pp-sym/: " id)
+      (format stream "symbol ~/pvs:pp-sym/: " id)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
       (write-string "El_k " stream)
@@ -549,7 +550,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (write-string " ≔ " stream)
       (pprint-newline :fill stream)
       (pprint-abstraction
-       type-value (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)) stream))
+       ;; Build properly the subtype expression for printing
+       (mk-subtype supertype (mk-name-expr (id predicate)))
+       (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)) stream))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -567,7 +570,10 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (let ((defn (univ-closure definition))
             (axiomp (member spelling '(AXIOM POSTULATE))))
         (pprint-logical-block (stream nil)
-          (format stream (if axiomp "symbol" "theorem"))
+          (unless axiomp
+            (write-string "opaque" stream)
+            (fresh-line stream))
+          (write-string "symbol" stream)
           (format stream " ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
@@ -576,7 +582,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (fresh-line stream)
         (setf *signature* (cons id *signature*))
         (unless axiomp
-          (format stream "proof~%")
+          (format stream "≔ begin~%")
           ;; TODO: export proof
           (format stream "abort"))))))
 
@@ -590,7 +596,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
                (ctx-thy (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
                (bindings (concatenate 'list ctx-thy (car form-proj))))
           (pprint-logical-block (stream nil)
-            (format stream "definition ~/pvs:pp-sym/: " id)
+            (format stream "symbol ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
             (write-string "El_s " stream)
