@@ -18,6 +18,7 @@ file=""
 output=""
 specification=""
 verbose=3
+typecheck=1
 
 specdir=""
 
@@ -40,11 +41,15 @@ will be sought in this file. An entry starting with a pound '#' is a comment and
 is ignored. Otherwise, an entry which starts by a letter is the name of a theory
 in the file indicated by the last file entry. Considering a theory named 'thy',
 it is translated to a file 'thy.lp' in the same directory as the
-specification.]"
+specification.
+
+Translated files can be type checked by Lambdapi (taken from the PATH). Files to
+be typechecked may be edited.]"
 USAGE+="[f:file?File containing the theory.]:[path]"
 USAGE+="[t:theory?Name of the theory to translate.]:[theory]"
 USAGE+="[o:output?Target file of the translation.]:[path]"
 USAGE+="[s:specification?Translate using specification.]:[spec]"
+USAGE+="[c:check?Whether to type check translated files]"
 USAGE+="[v:verbose]#[verbose:=3?Verbosity level.]"
 USAGE+=$'\n\n\n\n'
 while getopts "${USAGE}" o; do
@@ -55,6 +60,7 @@ while getopts "${USAGE}" o; do
         s) specification="${OPTARG}"
            specdir="$(dirname "${specification}")"
            ;;
+        c) typecheck=0 ;;
         v) verbose="${OPTARG}"
     esac
 done
@@ -66,6 +72,27 @@ translate() {
         "${file}" "${thy}" "${specdir}/${thy}.lp")"
     if (print "${output}" | grep -q 'debugger invoked'); then
         printf '[%s#%s]: Error\n' "${file}" "${thy}"
+        exit 1
+    fi
+}
+
+remove_logic () {
+  # Remove import of theories that deal with logical connectives
+  # since they are replaced by our owns.
+  thy="$1"
+  for pthy in 'booleans' 'equalities' 'notequal' 'if_def' 'boolean_props'; do
+      sed -i -E "s:(require open pvs.prelude.${pthy})://\1:" \
+          "${specdir}/${thy}.lp"
+  done
+}
+
+lp_check () {
+    # Check file that corresponds to a translated theory with lambdapi
+    thy="$1"
+    if lambdapi check "${specdir}/${thy}.lp"; then
+        printf 'Successfully translated %s\n' "$thy"
+    else
+        printf 'Invalid theory %s\n' "$thy"
         exit 1
     fi
 }
@@ -84,8 +111,13 @@ else
             continue
         elif (print -f "${line}" | grep -E -q '^[a-zA-Z][a-zA-Z0-9_\?]+$')
         then
+            # In that case, LINE is a theory name
             printf 'Translating %s\n' "${line}"
             translate "${file}" "${line}"
+            if [ ${typecheck} ]; then
+                remove_logic "${line}"
+                lp_check "${line}"
+            fi
         else
             printf '[%s:%d]: Invalid line\n' "${specification}" "${LC}"
             exit 1

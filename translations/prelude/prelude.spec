@@ -1,9 +1,9 @@
 <lib/prelude.pvs
-booleans
+#booleans
 #equalities
-notequal
-if_def
-boolean_props
+#notequal
+#if_def
+#boolean_props
 xor_def
 quantifier_props
 defined_types

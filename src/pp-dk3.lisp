@@ -1,7 +1,7 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
-;;; TODO some definitions seem to be unfolded every time (type definitions)
+;;; TODO how to handle uppercase / lowercase identifiers?
 ;;; TODO non dependent product type with elements of type TYPE
 ;;; TODO module resolution and importing
 ;;; TODO recursive functions
@@ -16,10 +16,10 @@
 (deftype polylist (ty)
   `(or (cons ,ty list) null))
 
-(declaim (type (cons (cons symbol symbol) list) *dk-sym-map*))
+(declaim (type (cons (cons symbol string) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
-  `((|boolean| . prop) (|bool| . prop) (|type| . ,(intern "{|set|}"))
-    (true . true) (false . false))
+  `((|boolean| . "prop") (|bool| . "prop") (true . "true") (false . "false")
+    (|type| . "{|set|}" ))
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
 
@@ -232,14 +232,11 @@ creating a variable."
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
 necessary."
   (flet ((sane-charp (c)
-           (cond
-             ((alphanumericp c) t)
-             ((char= c #\_) t)
-             (t nil))))
+           (or (alphanumericp c) (char= #\_ c))))
     (let ((dk-sym (assoc sym *dk-sym-map*)))
-      (cond (dk-sym (format stream "~(~a~)" (cdr dk-sym)))
-            ((every #'sane-charp (string sym)) (format stream "~(~a~)" sym))
-            (t (format stream "{|~(~a~)|}" sym))))))
+      (cond (dk-sym (format stream "~a" (cdr dk-sym)))
+            ((every #'sane-charp (string sym)) (format stream "~a" sym))
+            (t (format stream "{|~a|}" sym))))))
 
 (declaim (ftype (function (type-expr type-expr stream *) null) pprint-funtype))
 (defgeneric pprint-funtype (domain range stream &optional wrap)
@@ -513,8 +510,6 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (pprint-logical-block (stream nil)
       (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_El_k " id)
       (pprint-prenex *type* 'kind stream t))
-    (fresh-line stream)
-    (format stream "rule μ ~/pvs:pp-sym/ ↪ ~/pvs:pp-sym/" id id)
     (fresh-line stream)
     ;; No dynamic scoping because we never remove elements from the signature
     (setf *signature* (cons id *signature*))))

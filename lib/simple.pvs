@@ -106,6 +106,8 @@ BEGIN
   form: LEMMA pr(x) IMPLIES pr(x)
   %% Constant decl
   func(x,y:d):r = g(x,y)
+  %% Constant with lambda abstraction
+  flam:funtype = LAMBDA(x: d): g(x,x)
 END prenex
 
 thyparams[d: TYPE, e: d]: THEORY BEGIN
