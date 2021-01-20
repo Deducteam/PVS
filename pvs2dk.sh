@@ -89,7 +89,7 @@ remove_logic () {
 lp_check () {
     # Check file that corresponds to a translated theory with lambdapi
     thy="$1"
-    if lambdapi check "${specdir}/${thy}.lp"; then
+    if lambdapi check -v0 -w "${specdir}/${thy}.lp"; then
         printf 'Successfully translated %s\n' "$thy"
     else
         printf 'Invalid theory %s\n' "$thy"
