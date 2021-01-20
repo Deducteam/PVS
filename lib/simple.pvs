@@ -16,6 +16,7 @@ BEGIN
 
   % Constant declaration
   one: nat = succ(zero)
+  double : [nat -> nat] = LAMBDA (n: nat): plus(n, n)
 
   % Proposition
   z_not_succ: AXIOM FORALL (n: nat): succ(n) /= zero
@@ -114,6 +115,8 @@ thyparams[d: TYPE, e: d]: THEORY BEGIN
   x: VAR d
   op: [d, d -> d]
   id : AXIOM op(x,e) = x
+
+  neurtral(x): d = e
 END thyparams
 
 thyparams_tup[d: TYPE, e: [d, d]]: THEORY BEGIN

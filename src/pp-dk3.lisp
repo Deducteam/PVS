@@ -60,6 +60,20 @@ as a list is exhausted."
         for e2 in l2
         collect (cons e1 e2)))
 
+;; The constructor of dependent types. PVS doesn't introduce it because
+;; everything is typed as TYPE
+(defcl fundtype (funtype))
+(defun mk-fundtype (domain range)
+  "Creates a dependent function type."
+  (make-instance 'fundtype :domain domain :range range))
+
+(declaim (ftype (function (list type-expr) type-expr) dprod-of-domains))
+(defun dprod-of-domains (domains range)
+  "Create the (currified) depent function type from list DOMAINS to RANGE"
+  (if (null domains) range
+      (destructuring-bind (hd &rest tl) domains
+        (dprod-of-domains tl (mk-fundtype hd range)))))
+
 ;;; Contexts
 ;;;
 ;;; Contexts are  global variables that are  filled during the export.  They are
@@ -133,7 +147,7 @@ psub u_pred.")
   (:method ((ex name-expr)) (type (car (resolutions ex))))
   (:method ((ex bind-decl)) (type ex))
   (:method ((ex expr-as-type)) (expr ex))
-  (:method (ex) (type ex)))
+  (:method (ex) (error "Unknown expression" (describe ex))))
 
 (declaim (type (integer) *var-count*))
 (defparameter *var-count* 0
@@ -182,12 +196,12 @@ a function name from where the debug is called)."
                                                 (cons integer symbol))))))
           pack-arg-tuple))
 (defun pack-arg-tuple (args &key vars projspec)
-  "Transform the list of list of arguments in ARGS into a list. For any element
-E of ARGS, if E has length one, the result is the element. Otherwise, a new
-variable `v' is created, its type is sought from `*ctx*' and we add a binding
-`(x . (n . v))' for each symbol in E, where `x' is the symbol, `n' is its
-position in E. The list of variables and the mapping are returned as a `cons'
-cell."
+  "Transform the list of list of arguments in ARGS into a cons cell.
+The `car' of the cell contains binding declarations that match variables
+introduced by ARGS. The type of the binding declaration is sought from `*ctx*'.
+The `cdr' contains tuple specifications. For any element E
+of ARGS, its tuple specification if it is of length 1 is `nil'. Otherwise, its
+specification is a list (x . (n . (m . v))) with `x' the symbol in E."
   (labels ((type-with-ctx (elt)
              (declare (type expr elt))
              (with-slots (id declared-type) elt
@@ -515,12 +529,21 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
-  "t: TYPE = x."
+  "t: TYPE = x, but also domain(f): TYPE = D"
   (print "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
       (format stream "symbol ~/pvs:pp-sym/: El_k " id)
-      (pprint-prenex *type* 'kind stream t)
+      (let* ((args (car (pack-arg-tuple formals)))
+             (tys (mapcar #'type-of-expr args))
+             (ty (dprod-of-domains tys *type*)))
+        ;; In the case of type definitions with arguments, the type-expr is
+        ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
+        ;; of type (TYPE, KIND, KIND). So we rebuild back this type based on the
+        ;; formals. Since the arrow *> is not the same as ~>, we use
+        ;; `dprod-of-domains' which builds a sequence of `*>'.
+        (declare (type type-expr ty))
+        (pprint-prenex ty 'kind stream t))
       (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
@@ -764,6 +787,13 @@ can be used."
   (print-debug "funtype")
   (with-slots (domain range) te
     (pprint-funtype domain range stream colon-p)))
+
+(defmethod pp-dk (stream (te fundtype) &optional colon-p at-sign-p)
+  "Prints dependent functions with arrow of type (Set, Kind, Kind)"
+  (print-debug "fundtype")
+  (with-parens (stream colon-p)
+    (with-slots (domain range) te
+      (format stream "~:/pvs:pp-dk/ *> ~:/pvs:pp-dk/" domain range))))
 
 ;;; Expressions
 
