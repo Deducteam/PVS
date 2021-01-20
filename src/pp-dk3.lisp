@@ -981,6 +981,12 @@ translation to scale up, because expressions become too verbose."
       (format stream "~:/pvs:pp-dk/ ⊃ ~i~:_(λ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
+(defmethod pp-dk (stream (ex iff) &optional colon-p at-sign-p)
+  "IFF(A, B)"
+  (with-parens (stream colon-p)
+    (with-binapp-args (argl argr ex)
+      (format stream "iff ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" argl argr))))
+
 (defmethod pp-dk (stream (ex negation) &optional colon-p _at-sign-p)
   "NOT(A), there is also a `unary-negation' that represents NOT A."
   (print "negation")
