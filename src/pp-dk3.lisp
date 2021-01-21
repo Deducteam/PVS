@@ -1,7 +1,6 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
-;;; TODO how to handle uppercase / lowercase identifiers?
 ;;; TODO non dependent product type with elements of type TYPE
 ;;; TODO module resolution and importing
 ;;; TODO recursive functions
@@ -69,10 +68,13 @@ as a list is exhausted."
 
 (declaim (ftype (function (list type-expr) type-expr) dprod-of-domains))
 (defun dprod-of-domains (domains range)
-  "Create the (currified) depent function type from list DOMAINS to RANGE"
-  (if (null domains) range
-      (destructuring-bind (hd &rest tl) domains
-        (dprod-of-domains tl (mk-fundtype hd range)))))
+  "Create the (currified) depent function type from list DOMAINS to RANGE."
+  (labels
+      ((of-domains (domains range)
+         (if (null domains) range
+             (destructuring-bind (hd &rest tl) domains
+               (of-domains tl (mk-fundtype hd range))))))
+    (of-domains (reverse domains) range)))
 
 ;;; Contexts
 ;;;
@@ -196,43 +198,55 @@ a function name from where the debug is called)."
                                                 (cons integer symbol))))))
           pack-arg-tuple))
 (defun pack-arg-tuple (args &key vars projspec)
-  "Transform the list of list of arguments in ARGS into a cons cell.
-The `car' of the cell contains binding declarations that match variables
-introduced by ARGS. The type of the binding declaration is sought from `*ctx*'.
-The `cdr' contains tuple specifications. For any element E
-of ARGS, its tuple specification if it is of length 1 is `nil'. Otherwise, its
-specification is a list (x . (n . (m . v))) with `x' the symbol in E."
-  (labels ((type-with-ctx (elt)
-             (declare (type expr elt))
-             (with-slots (id declared-type) elt
-               (if (null declared-type)
-                   (let ((v-ty (assoc id *ctx*)))
-                     (assert (not (null v-ty))
-                             (id *ctx*)
-                             "Could not find variable ~S in context ~S."
-                             id *ctx*)
-                     (cdr v-ty))
-                   declared-type)))
-           (pack-type (l)
-             "Make a `bind-decl' out of L, either by taking the `car' or
-creating a variable."
-             (declare (type list l))
-             (if (= 1 (length l))
-                 (let ((elt (car l)))
-                   (make-bind-decl (id elt) (type-with-ctx elt)))
-                 (let ((var (intern (fresh-var :prefix "tup")))
-                       (typ (make-tupletype (mapcar #'type-with-ctx l))))
-                   (make-bind-decl var typ))))
-           (get-pspec (l var)
-             (declare (type list l))
-             (declare (type symbol var))
-             (let ((len (length l)))
-               (unless (= 1 len)
-                 (loop for e in l
-                       for i upto (- len 1)
-                       collect (cons (id e) (cons i (cons len var))))))))
-    (if (null args) (cons vars projspec)
+  "Transform the list of list of formals in ARGS into a pair (vs . ps)
+where VS is a list of binding declarations, and PS is a list of projection
+specifications. For each element E of ARGS, if its length is one, then it is a
+variable and a bind decl is made out of it and added to VS. Otherwise, if its
+length is more than one, it represents a tuple of argument. In that case, a
+fresh variable is created for the binding declaration, and its type is the list
+of types of the elements of E. The second element is a list of projection
+specifications. For each element E of ARGS, if its length is one, its projection
+specification is `nil'. Otherwise, it is a list (x . (n . (m . v))) where X
+is the identifier of the formal (that is an element of a tuple), N is its
+position in the tuple, M is the length of the tuple and V is the name of the
+fresh variable created for this tuple.
+We have ARGS of same length as VS and PS."
+  (labels
+      ((type-with-ctx (elt)
+         "Type formal ELT with its `declared-type' if it exists, or from
+`*ctx*'."
+         (declare (type expr elt))
+         (with-slots (id declared-type) elt
+           (if (null declared-type)
+               (let ((v-ty (assoc id *ctx*)))
+                 (assert (not (null v-ty))
+                         (id *ctx*)
+                         "Could not find variable ~S in context ~S."
+                         id *ctx*)
+                 (cdr v-ty))
+               declared-type)))
+       (pack-type (l)
+         "Make a `bind-decl' out of L, either by taking the `car' or
+creating a fresh variable that stand for a tuple."
+         (declare (type list l))
+         (if (= 1 (length l))
+             (let ((elt (car l)))
+               (make-bind-decl (id elt) (type-with-ctx elt)))
+             (let ((var (intern (fresh-var :prefix "tup")))
+                   (typ (make-tupletype (mapcar #'type-with-ctx l))))
+               (make-bind-decl var typ))))
+       (get-pspec (l var)
+         "Make the projection specification of list of bindings L"
+         (declare (type list l))
+         (declare (type symbol var))
+         (let ((len (length l)))
+           (unless (= 1 len)
+             (loop for e in l
+                   for i upto (- len 1)
+                   collect (cons (id e) (cons i (cons len var))))))))
+    (if (null args) (cons (reverse vars) (reverse projspec))
         (destructuring-bind (hd &rest tl) args
+          (declare (type list hd))
           (let* ((bd (pack-type hd))
                  (spec (get-pspec hd (id bd))))
             (pack-arg-tuple
@@ -612,7 +626,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (let* ((form-proj (pack-arg-tuple formals))
                (*packed-tuples* (cdr form-proj))
                (ctx-thy (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
-               (bindings (concatenate 'list ctx-thy (car form-proj))))
+               (form-bds (car form-proj))
+               (bindings (concatenate 'list ctx-thy form-bds)))
           (pprint-logical-block (stream nil)
             (format stream "symbol ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
@@ -720,7 +735,7 @@ definitions are expanded, and the translation becomes too large."
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool] but also [bool, bool -> bool]"
-  (print-debug "tuple-type")
+  (print "tuple-type")
   (with-slots (types) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -735,7 +750,7 @@ definitions are expanded, and the translation becomes too large."
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
-  (print-debug "subtype" te)
+  (print "subtype")
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -751,7 +766,7 @@ definitions are expanded, and the translation becomes too large."
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
 type."
-  (print-debug "expr-as-type" te)
+  (print "expr-as-type")
   (with-slots (expr) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -763,14 +778,14 @@ type."
 (defmethod pp-dk (stream (te simple-expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?) without inheriting subtypes. I don't know when it
 can be used."
-  (print-debug "simpl-expr-as-type" te)
+  (print "simpl-expr-as-type")
   (with-slots (expr) te
     (pp-dk stream expr colon-p at-sign-p)))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM. Used for instance with dependent
 (sub)types `subt(i)` where `subt(i) = {x: ... | f(i)}`."
-  (print-debug "type-application" te)
+  (print "type-application")
   (with-slots (type parameters) te
     (with-parens (stream colon-p)
       (pp-dk stream type t)
@@ -784,13 +799,13 @@ can be used."
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
-  (print-debug "funtype")
+  (print "funtype")
   (with-slots (domain range) te
     (pprint-funtype domain range stream colon-p)))
 
 (defmethod pp-dk (stream (te fundtype) &optional colon-p at-sign-p)
   "Prints dependent functions with arrow of type (Set, Kind, Kind)"
-  (print-debug "fundtype")
+  (print "fundtype")
   (with-parens (stream colon-p)
     (with-slots (domain range) te
       (format stream "~:/pvs:pp-dk/ *> ~:/pvs:pp-dk/" domain range))))
@@ -800,7 +815,7 @@ can be used."
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
   "Print name NAME applying theory formal parameters if needed. Takes care of
 name resolution"
-  (print-debug "name")
+  (print "name")
   (with-slots (id mod-id actuals) ex
     (cond
       ;; Member of an unpacked tuple: as it has been repacked, we transform this
@@ -858,7 +873,7 @@ name resolution"
 (defmethod pp-dk (stream (ex application) &optional colon-p _at-sign-p)
   "Print application EX. The expression EX ``f(e1,e2)(g1,g2)'' will be printed
 as ``f (σcons e1 e2) (σcons g1 g2)''."
-  (print-debug "application")
+  (print "application")
   (if (null (type ex))
       ;; For some reason, application-judgements end up as application
       ;; expressions. We don’t handle them here.
@@ -901,7 +916,7 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
   "Prints tuples ``(e1, e2, e3)'' as ``(σcons e1 (σcons e2 e3))''. Note that we
 use implicit arguments for σcons. Making arguments explicit prevents the
 translation to scale up, because expressions become too verbose."
-  (print-debug "tuple-expr" ex)
+  (print "tuple-expr")
   (with-slots (exprs) ex
     ;; Tuple types have at least 2 elements (PVS invariant)
     (with-parens (stream colon-p)
@@ -920,7 +935,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
-  (print-debug "branch")
+  (print "branch")
   (destructuring-bind (prop then else) (exprs (argument ex))
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -1031,7 +1046,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
-  (print-debug "actual")
+  (print "actual")
   (pp-dk stream (expr ac) colon-p at-sign-p))
 
 (defmethod pp-dk (stream (ex bitvector) &optional _colon-p _at-sign-p)
