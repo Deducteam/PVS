@@ -116,6 +116,10 @@ else
             translate "${file}" "${line}"
             if [ ${typecheck} ]; then
                 remove_logic "${line}"
+                if [ -x "${specdir}/${line}_edit" ]; then
+                    ( cd "${specdir}" || exit 1
+                      ./"${line}_edit" )
+                fi
                 lp_check "${line}"
             fi
         else
