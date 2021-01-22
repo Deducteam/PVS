@@ -76,11 +76,11 @@ translate() {
     fi
 }
 
-remove_logic () {
-  # Remove import of theories that deal with logical connectives
-  # since they are replaced by our owns.
+preprocess () {
+  # Preprocess the translation of a theory (the translated theory)
   thy="$1"
-  for pthy in 'booleans' 'equalities' 'notequal' 'if_def' 'boolean_props'; do
+  for pthy in 'booleans' 'equalities' 'notequal' 'if_def' 'boolean_props' \
+              'functions_alt' 'restrict'; do
       sed -i -E "s:(require open pvs.prelude.${pthy})://\1:" \
           "${specdir}/${thy}.lp"
   done
@@ -115,11 +115,7 @@ else
             printf 'Translating %s\n' "${line}"
             translate "${file}" "${line}"
             if [ ${typecheck} ]; then
-                remove_logic "${line}"
-                if [ -x "${specdir}/${line}_edit" ]; then
-                    ( cd "${specdir}" || exit 1
-                      ./"${line}_edit" )
-                fi
+                preprocess "${line}"
                 lp_check "${line}"
             fi
         else

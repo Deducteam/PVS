@@ -11,7 +11,9 @@ exists1
 equality_props
 if_props
 functions
-functions_alt
+## functions_alt only redefines some functions of the "functions" theory
+## we skip it since we do not handle overloading
+#functions_alt
 transpose
 ## restrict
 #restrict_props

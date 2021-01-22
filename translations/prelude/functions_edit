@@ -1,9 +1,0 @@
-#!/bin/ksh93
-set -euo pipefail
-
-# Remove currified preserves and inverts
-sed -i '117,125d;143,151d' functions.lp
-
-## Local Variables:
-## mode: shell-script
-## End:

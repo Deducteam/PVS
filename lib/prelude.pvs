@@ -277,17 +277,16 @@ functions [D, R: TYPE]: THEORY
 
   graph(f)(x, y): bool = (f(x) = y)
 
-  preserves(f, Drel, Rrel): bool =
+  % Curried form
+  preserves(Drel, Rrel)(f): bool =
       FORALL x1, x2: Drel(x1, x2) IMPLIES Rrel(f(x1), f(x2))
 
-  % Curried form
-  preserves(Drel, Rrel)(f): bool = preserves(f, Drel, Rrel)
+  %inverts(f, Drel, Rrel): bool =
+  %   FORALL x1, x2: Drel(x1, x2) IMPLIES Rrel(f(x2), f(x1))
 
-  inverts(f, Drel, Rrel): bool =
+  % Curried form
+  inverts(Drel, Rrel)(f): bool =
       FORALL x1, x2: Drel(x1, x2) IMPLIES Rrel(f(x2), f(x1))
-
-  % Curried form
-  inverts(Drel, Rrel)(f): bool = inverts(f, Drel, Rrel)
 
  END functions
 
