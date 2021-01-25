@@ -105,13 +105,47 @@ seek their type into this context only (and not previous LAMBDA bindings).")
   "Context used to translate rewriting definitions. Variables in this context
 are translated to rewriting variables.")
 
-(declaim (type context *ctx-thy*))
-(defparameter *ctx-thy* nil
-  "Contain theory formals. All declared (and defined) symbols must abstract on
-the definitions of this context using `pprint-prenex'. For instance, if this
-variable contains ((t . TYPE) (n . nat)), then all symbols will start by
-quantifying over a type and a natural. Note that we cannot separate types from
-value declarations because types may depend on values.")
+;;;
+;;; We Define here functions to manipualate the formals of the theory. Ideally,
+;;; we'd make a package, but it requires to package a bit everything.
+;;;
+
+(declaim (type (cons context context) *ctx-thy*))
+(defparameter *ctx-thy* (cons nil nil)
+  "Contain theory formals. The `car' contains type variables (variables whose
+type is `TYPE') and the `cdr' contains the values (whose type is a type of type
+`TYPE').  All declared (and defined) symbols must abstract on the definitions of
+this context using `pprint-prenex'.
+For instance, the `car' is (t . TYPE) and the `cdr' is (n . nat), then all
+symbols will start by quantifying over a type (using prenex polymorphism) and a
+natural.")
+
+(defun add-thy-type (ty)
+  "Returns the context `*ctx-thy*' with an added type."
+  (destructuring-bind (tys . vas) *ctx-thy*
+    (cons (acons ty *type* tys) vas)))
+
+(defun add-thy-val (va ty)
+  "Returns the context `*ctx-thy*' with value VA of type TY added."
+  (destructuring-bind (tys . vas) *ctx-thy*
+    (cons tys (acons va ty vas))))
+
+(declaim (ftype (function () (polylist bind-decl))))
+(defun bind-decl-of-thy ()
+  "Returns a list of binding declaration from `*ctx-thy*'. It returns binding
+declarations for types concatenated with binding declarations for values."
+  (let ((tys (reverse (car *ctx-thy*)))
+        (vas (reverse (cdr *ctx-thy*))))
+   (mapcar #'ctxe->bind-decl (append tys vas))))
+
+(defun thy-types->ctx () (reverse (car *ctx-thy*)))
+
+(defun thy-values->ctx () (reverse (cdr *ctx-thy*)))
+
+(defun assoc-thy (id)
+  "Search for identifier ID in types then in values of `*ctx-thy*'."
+  (let ((r (assoc id (car *ctx-thy*))))
+    (if r r (assoc id (cdr *ctx-thy*)))))
 
 (declaim (type (polylist (cons symbol symbol)) *ctx-thy-subtypes*))
 (defparameter *ctx-thy-subtypes* nil
@@ -387,16 +421,13 @@ of `*ctx-thy*'."
                               ('kind "scheme_k ")
                               ('set "scheme_s ")
                               ('bool "")))
-                    (ctx-values (remove-if
-                                 #'(lambda (idt) (is-*type*-p (cdr idt)))
-                                 (reverse *ctx-thy*))))
+                    (ctx-values (thy-values->ctx)))
                 (write-string scheme stream)
                 (pprint-dtype ctx-values))
               (let ((quant (case kind ('kind "∀K") ('set "∀S") ('bool "∀B"))))
                 (ppqu quant ctx)))))
     (with-parens (stream wrap)
-      (ppp (remove-if-not #'(lambda (idt) (is-*type*-p (cdr idt)))
-                          (reverse *ctx-thy*))))))
+      (ppp (thy-types->ctx)))))
 
 (declaim (ftype (function (symbol stream string) *) pprint-reqopen))
 (defun pprint-reqopen (mod stream &optional root)
@@ -495,14 +526,13 @@ the declaration of TYPE FROM."
                (let* ((pred (predicate (type-value hd)))
                       (*ctx-thy-subtypes*
                         (acons (id hd) (id pred) *ctx-thy-subtypes*))
-                      (*ctx-thy* (acons (id pred) (type pred) *ctx-thy*)))
+                      (*ctx-thy* (add-thy-val (id pred) (type pred))))
                  (process-formals tl theory)))
               ((formal-type-decl? hd)
-               (let ((*ctx-thy* (acons (id hd) *type* *ctx-thy*)))
+               (let ((*ctx-thy* (add-thy-type (id hd))))
                  (process-formals tl theory)))
               ((formal-const-decl? hd)
-               (let* ((*ctx-thy* (acons (id hd) (declared-type hd)
-                                        *ctx-thy*))
+               (let* ((*ctx-thy* (add-thy-val (id hd) (declared-type hd)))
                       ;; REVIEW adding to *ctx* might be superfluous
                       (*ctx* (acons (id hd) (declared-type hd) *ctx*)))
                  (process-formals tl theory)))))))
@@ -563,7 +593,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (pprint-newline :fill stream)
       (let* ((form-spec (pack-arg-tuple formals))
              (*packed-tuples* (cdr form-spec))
-             (ctx (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
+             (ctx (bind-decl-of-thy))
              (bindings (concatenate 'list ctx (car form-spec))))
         (pprint-abstraction type-expr bindings stream)))
     (setf *signature* (cons id *signature*))))
@@ -584,7 +614,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (pprint-abstraction
        ;; Build properly the subtype expression for printing
        (mk-subtype supertype (mk-name-expr (id predicate)))
-       (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)) stream))
+       (bind-decl-of-thy)
+       stream))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -625,7 +656,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (if definition
         (let* ((form-proj (pack-arg-tuple formals))
                (*packed-tuples* (cdr form-proj))
-               (ctx-thy (mapcar #'ctxe->bind-decl (reverse *ctx-thy*)))
+               (ctx-thy (bind-decl-of-thy))
                (form-bds (car form-proj))
                (bindings (concatenate 'list ctx-thy form-bds)))
           (pprint-logical-block (stream nil)
@@ -646,11 +677,12 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
+  ;; TODO not valid, the translated may be not terminating
   (print-debug "def-decl")
   (with-slots (id definition formals type) decl
     (let* ((form-spec (pack-arg-tuple formals))
            (*packed-tuples* (cdr form-spec))
-           (ctx-thy (mapcar #'ctxe->bind-decl *ctx-thy*)))
+           (ctx-thy (bind-decl-of-thy)))
       (format stream "// Recursive declaration ~a~%" id)
       (pprint-logical-block (stream nil)
         (format stream "symbol ~/pvs:pp-sym/: " id)
@@ -826,20 +858,20 @@ name resolution"
       ((assoc id *ctx*) (pp-sym stream id))
       ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
       ((member id *signature*)
-       (with-parens (stream (consp *ctx-thy*))
+       (with-parens (stream (consp (bind-decl-of-thy)))
          (pp-sym stream id)
-         (unless (null *ctx-thy*)
+         (unless (null (bind-decl-of-thy))
            ;; Apply theory arguments to symbols of signature
            (format stream " ~{~:/pvs:pp-dk/~^ ~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
                    (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
-                     (let* ((ctx-thy (reverse *ctx-thy*))
-                            (thy-types (remove-if-not #'cdr-*type*-p ctx-thy))
-                            (thy-val   (remove-if #'cdr-*type*-p ctx-thy)))
+                     (let* ((ctx-thy (bind-decl-of-thy))
+                            (thy-types (thy-types->ctx))
+                            (thy-val (thy-values->ctx)))
                        (mapcar #'(lambda (st) (mk-name-expr (car st)))
                                (concatenate 'list thy-types thy-val))))))))
-      ((assoc id *ctx-thy*) (pp-sym stream id))
+      ((assoc-thy id) (pp-sym stream id))
       ;; The symbol is a type declared as TYPE FROM in theory parameters,
       ;; we print it as a predicate sub-type
       ((assoc id *ctx-thy-subtypes*)
