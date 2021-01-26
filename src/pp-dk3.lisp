@@ -112,9 +112,11 @@ are translated to rewriting variables.")
 
 (defpackage theory
   (:use :cl :pvs)
+  (:documentation "This package provide functions to manipulate formals of
+theories. The list of formals is not updated with dynamic scoping because we
+never need to remove elements from this list.")
   (:nicknames :thy)
   (:export
-   :*ctx-thy*
    :add-type
    :add-val
    :bind-decl-of-thy
@@ -134,17 +136,19 @@ For instance, the `car' is (t . TYPE) and the `cdr' is (n . nat), then all
 symbols will start by quantifying over a type (using prenex polymorphism) and a
 natural.")
 
+(declaim (ftype (function (symbol) *) add-type))
 (defun add-type (ty)
-  "Returns the context `*ctx-thy*' with an added type."
+  "Add a type variable to the theory."
   (destructuring-bind (tys . vas) *ctx-thy*
-    (cons (acons ty pvs::*type* tys) vas)))
+    (setf (car *ctx-thy*) (acons ty pvs::*type* tys))))
 
+(declaim (ftype (function (symbol type-expr) *) add-val))
 (defun add-val (va ty)
-  "Returns the context `*ctx-thy*' with value VA of type TY added."
+  "Add a value variable VA of type TY to the theory."
   (destructuring-bind (tys . vas) *ctx-thy*
-    (cons tys (acons va ty vas))))
+    (setf (cdr *ctx-thy*) (acons va ty vas))))
 
-(declaim (ftype (function () (polylist bind-decl))))
+(declaim (ftype (function () list) bind-decl-of-thy))
 (defun bind-decl-of-thy ()
   "Returns a list of binding declaration from `*ctx-thy*'. It returns binding
 declarations for types concatenated with binding declarations for values."
@@ -230,7 +234,8 @@ psub u_pred.")
 a function name from where the debug is called)."
   (format t "~%~a:" ind)
   (format t "~%~a:" obj)
-  (format t "~%  tct:~i~<~a~:>" (list thy:*ctx-thy*))
+  (format t "~%  tht:~i~<~a~:>" (list (thy:types->ctx)))
+  (format t "~%  thv:~i~<~a~:>" (list (thy:values->ctx)))
   (format t "~%  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
   (format t "~%  ctx:~i~<~a~:>" (list *ctx*))
   (format t "~%  tup:~i~<~a~:>" (list *packed-tuples*))
@@ -541,16 +546,17 @@ the declaration of TYPE FROM."
                ;; Retrieve the name of the subtype
                (let* ((pred (predicate (type-value hd)))
                       (*ctx-thy-subtypes*
-                        (acons (id hd) (id pred) *ctx-thy-subtypes*))
-                      (thy:*ctx-thy* (thy:add-val (id pred) (type pred))))
+                        (acons (id hd) (id pred) *ctx-thy-subtypes*)))
+                 (thy:add-val (id pred) (type pred))
                  (process-formals tl theory)))
               ((formal-type-decl? hd)
-               (let ((thy:*ctx-thy* (thy:add-type (id hd))))
+               (progn
+                 (thy:add-type (id hd))
                  (process-formals tl theory)))
               ((formal-const-decl? hd)
-               (let* ((thy:*ctx-thy* (thy:add-val (id hd) (declared-type hd)))
-                      ;; REVIEW adding to *ctx* might be superfluous
+               (let* (;; REVIEW adding to *ctx* might be superfluous
                       (*ctx* (acons (id hd) (declared-type hd) *ctx*)))
+                 (thy:add-val (id hd) (declared-type hd))
                  (process-formals tl theory)))))))
        (up-to (e l &optional acc)
          "Return all symbols of list L up to symbol E. If E is not in L, all L
@@ -710,11 +716,13 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
-                              (mapcar #'car *ctx-thy*)
+                              (mapcar #'car (append (thy:types->ctx)
+                                                    (thy:values->ctx)))
                               (mapcar #'id (car form-spec))))
-      (let ((*ctx-local* (concatenate 'list
-                                      (ctx-of-bindings (car form-spec))
-                                      *ctx-thy*))
+      (let ((*ctx-local*
+              (concatenate 'list
+                           (ctx-of-bindings (car form-spec))
+                           (thy:types->ctx) (thy:values->ctx)))
             (*ctx* nil))
         (pp-dk stream definition colon-p at-sign-p)))))
 
