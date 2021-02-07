@@ -28,13 +28,13 @@ the symbols with a module id.")
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t)
           (*print-right-margin* 78))
-      (write-string "require open personoj.encodings.lhol
-require personoj.encodings.tuple as T
-require personoj.encodings.sum as S
+      (write-string "require open personoj.encodings.lhol;
+require personoj.encodings.tuple as T;
+require personoj.encodings.sum as S;
 require open personoj.encodings.prenex personoj.encodings.logical
-  personoj.encodings.pvs_cert
-require personoj.encodings.equality_tup as Eqtup
-require open personoj.encodings.builtins personoj.encodings.deptype" stream)
+  personoj.encodings.pvs_cert;
+require personoj.encodings.equality_tup as Eqtup;
+require open personoj.encodings.builtins personoj.encodings.deptype;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
 
@@ -413,13 +413,13 @@ dependent argument to yield type TEX."
                        ('set
                         (format stream "arrd {~/pvs:pp-dk/} " typ)
                         (with-parens (stream t)
-                          (format stream "λ~/pvs:pp-sym/," id)
+                          (format stream "λ ~/pvs:pp-sym/," id)
                           (pprint-newline :miser stream)
                           (pprint-dtype tl)))
                        ('bool
                         (format stream "∀ {~/pvs:pp-dk/} " typ)
                         (with-parens (stream t)
-                          (format stream "λ~/pvs:pp-sym/," id)
+                          (format stream "λ ~/pvs:pp-sym/," id)
                           (pprint-newline :miser stream)
                           (pprint-dtype tl))))))))
            (ppqu (qu ctx)
@@ -429,7 +429,7 @@ dependent argument to yield type TEX."
              (format stream "~a " qu)
              (with-parens (stream t)
                (pprint-logical-block (stream nil)
-                 (format stream "λ~/pvs:pp-sym/, " (caar ctx))
+                 (format stream "λ ~/pvs:pp-sym/, " (caar ctx))
                  (pprint-newline :fill stream)
                  (ppp (cdr ctx)))))
            (ppp (ctx)
@@ -575,13 +575,14 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (let ((prelude (mapcar #'id *prelude-theories*)))
         (loop for m in (up-to id prelude)
               do (pprint-reqopen m stream "pvs.prelude")
+              do (write-char #\; stream)
               do (fresh-line stream)))
       (process-formals formals-sans-usings theory))))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
   (with-slots (theory-name) imp
-    (format stream "require ~a" theory-name)))
+    (format stream "require ~a;" theory-name)))
 
 ;;; Declarations
 
@@ -591,7 +592,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (with-slots (id) decl
     (pprint-logical-block (stream nil)
       (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_El_k " id)
-      (pprint-prenex *type* 'kind stream t))
+      (pprint-prenex *type* 'kind stream t)
+      (write-char #\; stream))
     (fresh-line stream)
     ;; No dynamic scoping because we never remove elements from the signature
     (setf *signature* (cons id *signature*))))
@@ -619,7 +621,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
              (*packed-tuples* (cdr form-spec))
              (ctx (thy:bind-decl-of-thy))
              (bindings (concatenate 'list ctx (car form-spec))))
-        (pprint-abstraction type-expr bindings stream)))
+        (pprint-abstraction type-expr bindings stream))
+      (write-char #\; stream))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
@@ -639,7 +642,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
        ;; Build properly the subtype expression for printing
        (mk-subtype supertype (mk-name-expr (id predicate)))
        (thy:bind-decl-of-thy)
-       stream))
+       stream)
+      (write-char #\; stream))
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -671,7 +675,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (unless axiomp
           (format stream "≔ begin~%")
           ;; TODO: export proof
-          (format stream "abort"))))))
+          (format stream "abort"))
+        (write-char #\; stream)))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (print-debug "const-decl")
@@ -698,6 +703,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (pprint-newline :fill stream)
           (write-string "El_s " stream)
           (pprint-prenex type 'set stream t)))
+    (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
@@ -992,10 +998,10 @@ translation to scale up, because expressions become too verbose."
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
         (format stream "if ~:/pvs:pp-dk/ ~2i~:_" prop)
-        (format stream "~<(λ~a, ~1i~:_~/pvs:pp-dk/)~:>"
+        (format stream "~<(λ ~a, ~1i~:_~/pvs:pp-dk/)~:>"
                 (list (fresh-var) then))
         (write-char #\Space stream)
-        (format stream "~<(λ~a, ~1i~:_~/pvs:pp-dk/)~:>"
+        (format stream "~<(λ ~a, ~1i~:_~/pvs:pp-dk/)~:>"
                 (list (fresh-var) else))))))
 
 ;;; REVIEW: factorise disequation and equation
@@ -1035,7 +1041,7 @@ translation to scale up, because expressions become too verbose."
   (print "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "and ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)"
+      (format stream "and ~i~:_~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
@@ -1043,7 +1049,7 @@ translation to scale up, because expressions become too verbose."
   (print "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∧ ~i~:_(λ~a, ~/pvs:pp-dk/)"
+      (format stream "~:/pvs:pp-dk/ ∧ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
@@ -1051,7 +1057,7 @@ translation to scale up, because expressions become too verbose."
   (print "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "or ~i~:_~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)"
+      (format stream "or ~i~:_~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
@@ -1059,7 +1065,7 @@ translation to scale up, because expressions become too verbose."
   (print "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∨ ~i~:_(λ~a, ~/pvs:pp-dk/)"
+      (format stream "~:/pvs:pp-dk/ ∨ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
@@ -1067,7 +1073,7 @@ translation to scale up, because expressions become too verbose."
   (print "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "imp ~:/pvs:pp-dk/ ~:_(λ~a, ~/pvs:pp-dk/)"
+      (format stream "imp ~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
@@ -1075,7 +1081,7 @@ translation to scale up, because expressions become too verbose."
   (print "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ⊃ ~i~:_(λ~a, ~/pvs:pp-dk/)"
+      (format stream "~:/pvs:pp-dk/ ⊃ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex iff) &optional colon-p at-sign-p)
