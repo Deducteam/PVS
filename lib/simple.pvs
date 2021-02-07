@@ -1,4 +1,12 @@
-% Unit tests for translator
+% Some naturals for further use
+naturals: THEORY BEGIN
+  nat: TYPE
+  zero: nat
+  succ: [nat -> nat]
+  plus: [nat, nat -> nat]
+END naturals
+
+% Unit tests for translator, contains back nat to be self contained
 simple: THEORY
 BEGIN
   % Basic
@@ -88,6 +96,8 @@ BEGIN
   f(x, y): bool = NOT (x AND y)
 END tupfun
 
+%% Tests on theory formals
+
 prenex[d: TYPE, r: TYPE]:THEORY
 BEGIN
   % Type definition using theory parameters
@@ -125,14 +135,23 @@ thyparams_tup[d: TYPE, e: [d, d]]: THEORY BEGIN
   id: AXIOM op(e, x) = x
 END thyparams_tup
 
-mixedup[d: TYPE, n: nat, r: TYPE]: THEORY BEGIN
+% Mixing types and values in import. This may induce non-prenex polymorphism
+% that must be made prenex.
+mixedup[d: TYPE, n: d, r: TYPE]: THEORY BEGIN
   avalue: [d -> r]
 END mixedup
 
 usemixedup: THEORY BEGIN
   IMPORTING mixedup
-  theotherval: [nat -> nat] = mixedup[nat,3,nat].avalue
+  t: TYPE
+  v: t
+  theotherval: [t -> t] = mixedup[t,v,t].avalue
 END usemixedup
+
+% Formal with TYPE FROM
+subtypethy[d: TYPE, sd: TYPE FROM d]: THEORY BEGIN
+  sub: sd
+END subtypethy
 
 import: THEORY
 BEGIN
@@ -143,7 +162,7 @@ BEGIN
   binnat : prenex[simple.nat, simple.nat].binary
 END import
 
-vector[t: TYPE, n: nat]: THEORY
+vector[t: TYPE, (IMPORTING naturals) n: nat]: THEORY
 BEGIN
   vect: TYPE
 END vector
@@ -151,13 +170,15 @@ END vector
 vect_ops[t: TYPE]: THEORY
 BEGIN
   IMPORTING vector
-  nil: vector[t, 0].vect
-  cons(n: nat, e: t, v: vector[t, n].vect): vector[t, n + 1].vect
-  consc(n:nat)(e:t)(v:vector[t, n].vect): vector[t, n+1].vect
+  IMPORTING naturals
+  nil: vector[t, zero].vect
+  cons(n: nat, e: t, v: vector[t, n].vect): vector[t, succ(n)].vect
+  consc(n:nat)(e:t)(v:vector[t, n].vect): vector[t, succ(n)].vect
 END vect_ops
 
 tuples[t: TYPE]: THEORY
 BEGIN
+  IMPORTING naturals
   f(n: nat, g: [nat -> nat]): nat
   ffunc(n:nat)(g:[nat->nat]): nat
   ftup(ng: [nat, [nat -> nat]]): nat
@@ -177,7 +198,7 @@ BEGIN
   tup: TYPE = [n: nat, v: vector[t,n].vect, vv: vector[t, n].vect]
 END tuples
 
-linear_form[t: TYPE, n: nat, (IMPORTING vector[t,n]) ker: vector[t,n].vect]: THEORY
+linear_form[t: TYPE, (IMPORTING naturals) n: nat, (IMPORTING vector[t,n]) ker: vector[t,n].vect]: THEORY
 BEGIN
   form: [vector[t, n].vect -> nat]
 END linear_form
