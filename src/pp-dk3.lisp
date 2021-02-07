@@ -397,7 +397,7 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
 (declaim (ftype (function (type-expr symbol stream *) null) pprint-prenex))
 (defun pprint-prenex (tex kind stream &optional wrap)
   "Print type expression TEX of kind KIND with prenex polymorphism on
-`*ctx-thy*'. KIND can be symbol `kind', `set' or `bool'."
+the formals of the theory. KIND can be symbol `kind', `set' or `bool'."
   (labels ((pprint-dtype (ctx)
              "Print the type that is able to accept elements of context CTX as
 dependent argument to yield type TEX."
@@ -433,8 +433,8 @@ dependent argument to yield type TEX."
                  (pprint-newline :fill stream)
                  (ppp (cdr ctx)))))
            (ppp (ctx)
-             "Print quantifier and abstract on car of CTX or abstract on values
-of `*ctx-thy*'."
+             "Print quantifier and abstract on car of CTX or abstract on formals
+of the theory."
              (declaim (type context ctx))
              (if
               (null ctx)
@@ -544,9 +544,11 @@ the declaration of TYPE FROM."
             (cond
               ((formal-subtype-decl? hd)
                ;; Retrieve the name of the subtype
-               (let* ((pred (predicate (type-value hd)))
-                      (*ctx-thy-subtypes*
-                        (acons (id hd) (id pred) *ctx-thy-subtypes*)))
+               (let* ((pred (predicate (type-value hd))))
+                 ;; No dynamic scoping because `*ctx-thy-subtypes*' is never
+                 ;; depleted
+                 (setf *ctx-thy-subtypes*
+                       (acons (id hd) (id pred) *ctx-thy-subtypes*))
                  (thy:add-val (id pred) (type pred))
                  (process-formals tl theory)))
               ((formal-type-decl? hd)
