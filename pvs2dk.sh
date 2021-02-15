@@ -92,8 +92,24 @@ lp_check () {
     if lambdapi check -v0 -w "${specdir}/${thy}.lp"; then
         printf 'Successfully translated %s\n' "$thy"
     else
-        printf 'Invalid theory %s\n' "$thy"
-        exit 1
+        printf 'Subtyping required, using Malkasi\n'
+        sed -i -E "s:(require open personoj.encodings.lhol;)://\1:" \
+            "${specdir}/${thy}.lp"
+        sed -i -E "s:(require open personoj.encodings.pvs_cert;)://\1:" \
+            "${specdir}/${thy}.lp"
+        sed -i -E "s:(require personoj.encodings.tuple as T;)://\1:" \
+            "${specdir}/${thy}.lp"
+        if
+            malkasi --req-open personoj.encodings.lhol \
+                --req-as personoj.encodings.tuple:T \
+                --req-open personoj.encodings.pvs_cert \
+                "${specdir}/${thy}.lp"
+        then
+            printf 'Successfully translated %s with subtyping\n' "$thy"
+        else
+            printf 'Invalid theory %s\n' "$thy"
+            exit 1
+        fi
     fi
 }
 
