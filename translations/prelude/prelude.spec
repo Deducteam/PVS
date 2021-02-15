@@ -15,8 +15,8 @@ functions
 ## we skip it since we do not handle overloading
 #functions_alt
 transpose
-## restrict
-#restrict_props
+restrict
+restrict_props
 extend
 #extend_bool
 extend_props

@@ -126,7 +126,7 @@ thyparams[d: TYPE, e: d]: THEORY BEGIN
   op: [d, d -> d]
   id : AXIOM op(x,e) = x
 
-  neurtral(x): d = e
+  neutral(x): d = e
 END thyparams
 
 thyparams_tup[d: TYPE, e: [d, d]]: THEORY BEGIN
