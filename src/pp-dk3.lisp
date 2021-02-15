@@ -675,7 +675,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (unless axiomp
           (format stream "≔ begin~%")
           ;; TODO: export proof
-          (format stream "abort"))
+          (format stream "admit"))
         (write-char #\; stream)))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)

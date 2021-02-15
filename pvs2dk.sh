@@ -80,8 +80,8 @@ preprocess () {
   # Preprocess the translation of a theory (the translated theory)
   thy="$1"
   for pthy in 'booleans' 'equalities' 'notequal' 'if_def' 'boolean_props' \
-              'functions_alt' 'restrict'; do
-      sed -i -E "s:(require open pvs.prelude.${pthy})://\1:" \
+              'functions_alt'; do
+      sed -i -E "s:(require open pvs.prelude.${pthy};)://\1:" \
           "${specdir}/${thy}.lp"
   done
 }
