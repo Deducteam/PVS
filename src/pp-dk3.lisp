@@ -384,14 +384,17 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
   (with-slots (bindings expression) expr
     (if (null bindings)
         (pp-dk stream expression colon-p at-sign-p)
-        (let* ((newex (copy expr)))
+        (let ((newex (copy expr))
+              (bd (car bindings)))
           (setf (slot-value newex 'bindings) (cdr bindings))
           (with-parens (stream colon-p)
             (pprint-logical-block (stream nil)
               (write-string quant stream)
               (write-char #\Space stream)
+              ;; Print domain
+              (format stream "{~:/pvs:pp-dk/} " (type-of-expr bd))
               (with-parens (stream t)
-                (pprint-abstraction newex (list (car bindings)) stream))))))))
+                (pprint-abstraction newex (list bd) stream))))))))
 
 ;; REVIEW rename into `abstract-thy' or something of the kind
 (declaim (ftype (function (type-expr symbol stream *) null) pprint-prenex))
