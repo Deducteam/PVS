@@ -406,7 +406,9 @@ the formals of the theory. KIND can be symbol `kind', `set' or `bool'."
 dependent argument to yield type TEX."
              (declaim (type context ctx))
              (if (null ctx)
-                 (pp-dk stream tex t)
+                 (progn
+                   (pprint-newline :fill stream)
+                   (pp-dk stream tex t))
                  (destructuring-bind ((id . typ) &rest tl) ctx
                    (with-parens (stream t)
                      (case kind
@@ -417,13 +419,11 @@ dependent argument to yield type TEX."
                         (format stream "arrd {~/pvs:pp-dk/} " typ)
                         (with-parens (stream t)
                           (format stream "λ ~/pvs:pp-sym/," id)
-                          (pprint-newline :miser stream)
                           (pprint-dtype tl)))
                        ('bool
                         (format stream "∀ {~/pvs:pp-dk/} " typ)
                         (with-parens (stream t)
                           (format stream "λ ~/pvs:pp-sym/," id)
-                          (pprint-newline :miser stream)
                           (pprint-dtype tl))))))))
            (ppqu (qu ctx)
              "Print quantifier QU and abstract over the variable of car of CTX."
