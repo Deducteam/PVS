@@ -80,7 +80,7 @@ preprocess () {
   # Preprocess the translation of a theory (the translated theory)
   thy="$1"
   for pthy in 'booleans' 'equalities' 'notequal' 'if_def' 'boolean_props' \
-              'functions_alt'; do
+              'functions_alt' 'restrict_props'; do
       sed -i -E "s:(require open pvs.prelude.${pthy};)://\1:" \
           "${specdir}/${thy}.lp"
   done
@@ -91,25 +91,19 @@ lp_check () {
     thy="$1"
     if lambdapi check -v0 -w "${specdir}/${thy}.lp"; then
         printf 'Successfully translated %s\n' "$thy"
+    fi
+}
+
+malkasi_check () {
+    # Check translated file with malkasi: a version of lambdapi that handles
+    # subtyping using coercions
+    thy="$1"
+    if
+        malkasi -v0 -w "${specdir}/${thy}.lp"
+    then
+        printf 'Successfully translated %s\n' "$thy"
     else
-        printf 'Subtyping required, using Malkasi\n'
-        sed -i -E "s:(require open personoj.encodings.lhol;)://\1:" \
-            "${specdir}/${thy}.lp"
-        sed -i -E "s:(require open personoj.encodings.pvs_cert;)://\1:" \
-            "${specdir}/${thy}.lp"
-        sed -i -E "s:(require personoj.encodings.tuple as T;)://\1:" \
-            "${specdir}/${thy}.lp"
-        if
-            malkasi --req-open personoj.encodings.lhol \
-                --req-as personoj.encodings.tuple:T \
-                --req-open personoj.encodings.pvs_cert \
-                "${specdir}/${thy}.lp"
-        then
-            printf 'Successfully translated %s with subtyping\n' "$thy"
-        else
-            printf 'Invalid theory %s\n' "$thy"
-            exit 1
-        fi
+        printf 'Invalid theory %s\n' "$thy"
     fi
 }
 
@@ -132,7 +126,8 @@ else
             translate "${file}" "${line}"
             if [ ${typecheck} ]; then
                 preprocess "${line}"
-                lp_check "${line}"
+                malkasi_check "${line}"
+                # lp_check "${line}"
             fi
         else
             printf '[%s:%d]: Invalid line\n' "${specification}" "${LC}"

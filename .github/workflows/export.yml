@@ -17,9 +17,9 @@ jobs:
       run: |
         sudo apt install --yes emacs ksh
         url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
-        (cd ${HOME} || exit 1
+        cd ${HOME} || exit 1
         curl "$url" -L | tar jx
-        ln -s sbcl* sbcl)
+        ln -s sbcl* sbcl
 
     - name: compile pvs
       run: |
@@ -29,13 +29,10 @@ jobs:
         export SBCLISP_HOME="${HOME}/sbcl"
         make >output 2>&1
 
-    - name: toy examples
+    - name: translation
       run: |
         PVS=./pvs ./pvs2dk.sh -s translations/simple
-
-    - name: prelude grand schelem
-      run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/prelude
+        PVS=./pvs ./pvs2dk.sh -s translations/prelude/prelude.spec
 
     - name: lambdapi install
       run: |
@@ -50,27 +47,27 @@ jobs:
         (cd lambdapi || exit 1
          opam pin add -n -k path lambdapi .)
         opam install --deps-only -t -d lambdapi --yes
-        (cd lambdapi || exit 1
-         make install)
+        (cd lambdapi || exit 1; make install)
         why3 config --full-config
 
     - name: personoj install
       run: |
         git clone https://github.com/Deducteam/personoj.git personoj
-        (cd personoj || exit 1
+        cd personoj || exit 1
         eval $(opam env)
-        make install)
+        make install
 
-    - name: type check
+    - name: malkasi install
+      run: |
+        git clone https://gitlab.inria.fr/ghondet/malkasi.git
+        cd malkasi || exit 1
+        make install
+
+    - name: translate and typecheck
       run: |
         eval $(opam env)
-        cd translations || exit 1
-        lambdapi init pvs
-        cp *.lp pvs/
-        cd pvs || exit 1
-        rm 'nat.lp' 'main.lp'
-        # It’s normal that files do not typecheck
-        make || true
+        # Files do not typecheck yet
+        PVS=./pvs ./pvs2dk.sh -c -s translations/prelude/prelude.spec || true
 
     - name: upload files
       uses: actions/upload-artifact@v2
