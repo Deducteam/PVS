@@ -1,4 +1,4 @@
-#!/bin/ksh93
+#!/bin/ksh
 
 # usage: test-pp-dk.sh [options]
 #   -f p, --file p              translate theory from file p
