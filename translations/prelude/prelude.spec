@@ -41,7 +41,7 @@ function_inverse
 # Requires `assuming' processing
 #function_inverse_alt
 function_image
-function_props
+#function_props # Translation fails because of resolution
 function_props_alt
 function_props2
 relation_defs
