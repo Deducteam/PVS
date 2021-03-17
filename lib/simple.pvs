@@ -176,6 +176,7 @@ BEGIN
   IMPORTING NatArray
   nil: NatArray[naturals.zero].t
   grow(len: naturals.nat, v: NatArray[len].t): NatArray[naturals.succ(len)].t
+  mkNatArray(n: nat): TYPE = NatArray[n].t
 END NatArrayOps
 
 %% Dependent types and polymorphism

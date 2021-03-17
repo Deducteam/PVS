@@ -31,7 +31,7 @@ jobs:
 
     - name: translation
       run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/simple
+        PVS=./pvs ./pvs2dk.sh -s lib/translations/simple/simple.spec
         PVS=./pvs ./pvs2dk.sh -s translations/prelude/prelude.spec
 
     - name: lambdapi install
@@ -44,8 +44,7 @@ jobs:
         eval $(opam env)
         opam install alt-ergo.2.3.0 --yes
         git clone https://github.com/Deducteam/lambdapi.git lambdapi
-        (cd lambdapi || exit 1
-         opam pin add -n -k path lambdapi .)
+        (cd lambdapi || exit 1; opam pin add -n -k path lambdapi .)
         opam install --deps-only -t -d lambdapi --yes
         (cd lambdapi || exit 1; make install)
         why3 config --full-config
