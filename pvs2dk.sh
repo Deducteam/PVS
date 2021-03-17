@@ -18,7 +18,7 @@ file=""
 output=""
 specification=""
 verbose=3
-typecheck=1
+typecheck=false
 
 specdir=""
 
@@ -60,7 +60,7 @@ while getopts "${USAGE}" o; do
         s) specification="${OPTARG}"
            specdir="$(dirname "${specification}")"
            ;;
-        c) typecheck=0 ;;
+        c) typecheck=true ;;
         v) verbose="${OPTARG}"
     esac
 done
@@ -68,7 +68,7 @@ done
 translate() {
     # Translate pvs files when using specification.
     file="$1"  thy="$2"
-    output="$(${PVS} -batch -q -v "${verbose}" -l "${PVSWRAP}" -- \
+    output="$(${PVS} -batch -Q -v "${verbose}" -l "${PVSWRAP}" -- \
         "${file}" "${thy}" "${specdir}/${thy}.lp")"
     if (print "${output}" | grep -q 'debugger invoked'); then
         printf '[%s#%s]: Error\n' "${file}" "${thy}"
@@ -108,23 +108,23 @@ malkasi_check () {
 }
 
 if [[ -z "${specification}" ]]; then
-    $PVS -batch -q -v "${verbose}" -l "${PVSWRAP}" -- \
+    $PVS -batch -Q -v "${verbose}" -l "${PVSWRAP}" -- \
         "${file}" "${theory}" "${output}"
 else
     LC=1 # Line count
     while read -r line; do
         if (print -f "$line" | grep -E -q '^<'); then
             file="${line:1}"
-            printf 'Reading from PVS source file: %s\n' "${file}"
+            printf 'Reading from PVS source file: "%s"\n' "${file}"
         elif (print -f "${line}" | grep -E -q '^#'); then
             ((LC++))
             continue
         elif (print -f "${line}" | grep -E -q '^[a-zA-Z][a-zA-Z0-9_\?]+$')
         then
             # In that case, LINE is a theory name
-            printf 'Translating %s\n' "${line}"
+            printf 'Translating "%s"\n' "${line}"
             translate "${file}" "${line}"
-            if [ ${typecheck} ]; then
+            if ${typecheck}; then
                 preprocess "${line}"
                 malkasi_check "${line}"
                 # lp_check "${line}"
