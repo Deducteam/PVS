@@ -6,7 +6,7 @@ naturals: THEORY BEGIN
   plus: [nat, nat -> nat]
 END naturals
 
-% Unit tests for translator, contains back nat to be self contained
+% Unit tests for translator, contains nat to be self contained
 simple: THEORY
 BEGIN
   % Basic
@@ -90,83 +90,99 @@ BEGIN
   % sought from the declared variables.
 END decvar
 
-tupfun: THEORY
+%% Importing
+import: THEORY
 BEGIN
-  x, y: VAR boolean
-  f(x, y): bool = NOT (x AND y)
-END tupfun
+  IMPORTING naturals
+END import
+
+call_import: THEORY
+BEGIN
+  IMPORTING naturals
+  ax : AXIOM naturals.zero = naturals.zero
+END call_import
 
 %% Tests on theory formals
 
-prenex[d: TYPE, r: TYPE]:THEORY
+%% Prenex polymorphism
+prenex[D: TYPE]:THEORY
 BEGIN
   % Type definition using theory parameters
-  funtype:TYPE = [d -> r]
-  binary : TYPE = [d, d -> r]
+  funtype:TYPE = [D -> D]
   %% Constant declarations
   % Using theory param
+  d: D
   f: funtype
-  g: [d, d -> r]
-  pr : [d -> bool]
-  subt : TYPE = {x: d | pr(x)}
+  g: [D, D -> D]
+  pred : [D -> bool]
+  subt : TYPE = {x: D | pred(x)}
   % Not using theory param
   t: TYPE
   x: t
   %% Formula declaration
-  x: VAR d
-  form: LEMMA pr(x) IMPLIES pr(x)
+  form: LEMMA FORALL (x: D): pred(x) IMPLIES pred(x)
   %% Constant decl
-  func(x,y:d):r = g(x,y)
+  func(x:D):D = g(x,x)
   %% Constant with lambda abstraction
-  flam:funtype = LAMBDA(x: d): g(x,x)
+  flam:funtype = LAMBDA(x: D): g(x,x)
 END prenex
 
-thyparams[d: TYPE, e: d]: THEORY BEGIN
-  x: VAR d
-  op: [d, d -> d]
-  id : AXIOM op(x,e) = x
+%% Values in formals
+thyp_val[(IMPORTING naturals) n: naturals.nat]: THEORY
+BEGIN
+  double: nat = naturals.plus(n, n)
+END thyp_val
 
-  neutral(x): d = e
-END thyparams
-
-thyparams_tup[d: TYPE, e: [d, d]]: THEORY BEGIN
-  x: VAR d
-  op: [[d, d], d -> d]
-  id: AXIOM op(e, x) = x
-END thyparams_tup
+%% Types and values of this type
+thyp_type_val[D: TYPE, e: D]: THEORY BEGIN
+  op: [D, D -> D]
+  id : AXIOM FORALL (x: D): op(x,e) = x
+  neutral(x: D): D = e
+END thyp_type_val
 
 % Mixing types and values in import. This may induce non-prenex polymorphism
 % that must be made prenex.
-mixedup[d: TYPE, n: d, r: TYPE]: THEORY BEGIN
-  avalue: [d -> r]
+mixedup[D: TYPE, n: D, R: TYPE]: THEORY BEGIN
+  somefun: [D -> R]
+  getelt(e: D): D = n
 END mixedup
 
-usemixedup: THEORY BEGIN
+%% Call previous theories
+apply_theories: THEORY BEGIN
+  D: TYPE
+  R: TYPE
+  IMPORTING prenex
+  axprenex : AXIOM FORALL(e: D): func(e) = e
+  IMPORTING thyp_val
+  axthyp_val : AXIOM FORALL(n: naturals.nat): thyp_val[n].double = n
+  IMPORTING thyp_type_val
+  axthyp_type_val : AXIOM FORALL (e: D): thyp_type_val[D, e].neutral(e) = e
   IMPORTING mixedup
-  t: TYPE
-  v: t
-  theotherval: [t -> t] = mixedup[t,v,t].avalue
-END usemixedup
+  axmixedup : AXIOM FORALL (e: D): mixedup[D,e,R].getelt(e) = e
+END apply_theories
 
 % Formal with TYPE FROM
 subtypethy[d: TYPE, sd: TYPE FROM d]: THEORY BEGIN
   sub: sd
 END subtypethy
 
-import: THEORY
+%% Dependent types
+NatArray[(IMPORTING naturals) n: naturals.nat]: THEORY
 BEGIN
-  IMPORTING simple
-  IMPORTING prenex
+  t: TYPE
+END NatArray
+NatArrayOps: THEORY
+BEGIN
+  IMPORTING NatArray
+  nil: NatArray[naturals.zero].t
+  grow(len: naturals.nat, v: NatArray[len].t): NatArray[naturals.succ(len)].t
+END NatArrayOps
 
-  four: simple.nat
-  binnat : prenex[simple.nat, simple.nat].binary
-END import
-
+%% Dependent types and polymorphism
 vector[t: TYPE, (IMPORTING naturals) n: nat]: THEORY
 BEGIN
   vect: TYPE
 END vector
-
 vect_ops[t: TYPE]: THEORY
 BEGIN
   IMPORTING vector
@@ -176,7 +192,9 @@ BEGIN
   consc(n:nat)(e:t)(v:vector[t, n].vect): vector[t, succ(n)].vect
 END vect_ops
 
-tuples[t: TYPE]: THEORY
+%% Some experiments on tuples and arguments of functions, to mess with
+%% curryfication. Everything that is commented does not type check
+tuples: THEORY
 BEGIN
   IMPORTING naturals
   f(n: nat, g: [nat -> nat]): nat
@@ -192,12 +210,17 @@ BEGIN
   % y2: nat = ffunc(n, g)
   z2: nat = ffunc(n)(g)
   x3: nat = ftup(ng)
-  y3: nat =ftup(n, g)
+  y3: nat = ftup(n, g)
   % z3: nat = ftup(n)(g)
-  IMPORTING vector
-  tup: TYPE = [n: nat, v: vector[t,n].vect, vv: vector[t, n].vect]
 END tuples
+dep_tuple: THEORY
+BEGIN
+  IMPORTING NatArray
+  tup: TYPE = [n: naturals.nat, ar: NatArray[n].t]
+  tup3: TYPE = [n: naturals.nat, ar: NatArray[n].t, aar: NatArray[n].t]
+END dep_tuple
 
+%% Some more experiments
 linear_form[t: TYPE, (IMPORTING naturals) n: nat, (IMPORTING vector[t,n]) ker: vector[t,n].vect]: THEORY
 BEGIN
   form: [vector[t, n].vect -> nat]
@@ -217,16 +240,17 @@ BEGIN
   func : [(rec?) -> bool]
 END exprastype
 
+%% Dependent subtypes
 depsubtype: THEORY
 BEGIN
   T: TYPE
-  i: VAR T
   pre: [T, T -> bool]
-  subt(i) : TYPE = {s: T | pre(i, s)}
+  subt(i: T) : TYPE = {s: T | pre(i, s)}
   another_pred: [T -> bool]
   ax: AXIOM FORALL(n: T)(x: subt(n)): another_pred(x)
 END depsubtype
 
+%% Verify that subtypes are not expanded to their definition
 expandeddefs: THEORY
 BEGIN
   iota: TYPE
