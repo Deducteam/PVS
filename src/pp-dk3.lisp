@@ -22,6 +22,13 @@
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
 
+(defpackage dklog
+  (:documentation "Some logging facilities.")
+  (:use :cl)
+  (:export :log-top :log-expr :log-type :log-decl :log-ctxts))
+
+(in-package :dklog)
+
 (defvar *log-file* "/tmp/pp-dk3.log" "File used for logging and debugging.")
 
 (defun dk-log (tag format-str &rest args)
@@ -37,19 +44,21 @@ at the beginning of line and terminating line."
     (apply #'format out format-str args)
     (terpri out)))
 
-(defun dk-log-top (format-str &rest args)
+(defun log-top (format-str &rest args)
   (apply #'dk-log nil format-str args))
-(defun dk-log-decl (format-str &rest args)
+(defun log-decl (format-str &rest args)
   (apply #'dk-log "decl" format-str args))
-(defun dk-log-expr (format-str &rest args)
+(defun log-expr (format-str &rest args)
   (apply #'dk-log "expr" format-str args))
-(defun dk-log-type (format-str &rest args)
+(defun log-type (format-str &rest args)
   (apply #'dk-log "type" format-str args))
+
+(in-package :pvs)
 
 (declaim (ftype (function (syntax string) *) to-dk3))
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
-  (dk-log-top "Translating ~s" file)
+  (dklog:log-top "Translating ~s" file)
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* t)
           (*print-right-margin* 78))
@@ -254,17 +263,21 @@ psub u_pred.")
   `(destructuring-bind (,larg ,rarg &rest _) (exprs (argument ,binapp))
      ,@body))
 
-(defun dk-log-ctxts (ind &optional obj)
+(in-package :dklog)
+
+(defun log-ctxts (ind &optional obj)
   "Prints debug information on standard output with IND an indication (typically
 a function name from where the debug is called)."
   (dk-log nil "~a:" ind)
   (dk-log nil "~a:" obj)
   (dk-log nil "  tht:~i~<~a~:>" (list (thy:types->ctx)))
   (dk-log nil "  thv:~i~<~a~:>" (list (thy:values->ctx)))
-  (dk-log nil "  tst:~i~<~a~:>" (list *ctx-thy-subtypes*))
-  (dk-log nil "  ctx:~i~<~a~:>" (list *ctx*))
-  (dk-log nil "  tup:~i~<~a~:>" (list *packed-tuples*))
-  (dk-log nil "  lct:~i~<~a~:>" (list *ctx-local*)))
+  (dk-log nil "  tst:~i~<~a~:>" (list pvs::*ctx-thy-subtypes*))
+  (dk-log nil "  ctx:~i~<~a~:>" (list pvs::*ctx*))
+  (dk-log nil "  tup:~i~<~a~:>" (list pvs::*packed-tuples*))
+  (dk-log nil "  lct:~i~<~a~:>" (list pvs::*ctx-local*)))
+
+(in-package :pvs)
 
 (declaim (ftype
           (function (list
@@ -615,7 +628,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
-  (dk-log-decl "type decl")
+  (dklog:log-decl "type decl")
   (with-slots (id) decl
     (pprint-logical-block (stream nil)
       (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_El_k " id)
@@ -627,7 +640,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x, but also domain(f): TYPE = D"
-  (dk-log-decl "type-eq-decl")
+  (dklog:log-decl "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
       (format stream "symbol ~/pvs:pp-sym/: El_k " id)
@@ -654,8 +667,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
-  (dk-log-ctxts "type from" decl)
-  (dk-log-decl "type-from-decl")
+  (dklog:log-ctxts "type from" decl)
+  (dklog:log-decl "type-from-decl")
   (with-slots (id predicate supertype) decl
     ;; PREDICATE is a type declaration
     (pprint-logical-block (stream nil)
@@ -675,7 +688,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
-  (dk-log-decl "formula")
+  (dklog:log-decl "formula")
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
     (flet ((univ-closure (ex)
@@ -707,8 +720,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (write-char #\; stream)))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
-  (dk-log-decl "const")
-  (dk-log-ctxts "const-decl")
+  (dklog:log-decl "const")
+  (dklog:log-ctxts "const-decl")
   (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
     (if definition
@@ -737,8 +750,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   ;; TODO not valid, the translated may be not terminating
-  (dk-log-decl "def")
-  (dk-log-ctxts "def-decl")
+  (dklog:log-decl "def")
+  (dklog:log-ctxts "def-decl")
   (with-slots (id definition formals type) decl
     (let* ((form-spec (pack-arg-tuple formals))
            (*packed-tuples* (cdr form-spec))
@@ -766,8 +779,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
 
 (defmethod pp-dk (stream (decl conversion-decl) &optional colon-p at-sign-p)
   "CONVERSION elt, there are conversion(plus|minus)-decl as well."
-  (dk-log-decl "conversion")
-  (dk-log-ctxts "conversion-decl")
+  (dklog:log-decl "conversion")
+  (dklog:log-ctxts "conversion-decl")
   (with-slots (id) decl
     (format stream "// Conversion: ~/pvs:pp-sym/" id)))
 
@@ -786,14 +799,14 @@ is returned. ACC contains all symbols before E (in reverse order)."
                   &optional colon-p at-sign-p)
   "Print the judgement. A TCC is generated with the same `id'.
 See parse.lisp:826"
-  (dk-log-decl "application judgement")
-  (dk-log-ctxts "application-judgement" decl)
+  (dklog:log-decl "application judgement")
+  (dklog:log-ctxts "application-judgement" decl)
   (with-slots (id formals declared-type judgement-type name) decl
     (format stream "// Application judgement \"~a\"~%" id)))
 
 
 (defmethod pp-dk (stream (decl expr-judgement) &optional colon-p _at-sign-p)
-  (dk-log-ctxts "expr-judgement")
+  (dklog:log-ctxts "expr-judgement")
   (with-slots (id expr free-parameters) decl
     (let
         ;; See classes-decl.lisp:656
@@ -831,7 +844,7 @@ definitions are expanded, and the translation becomes too large."
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool] but also [bool, bool -> bool]"
-  (dk-log-type "tuple")
+  (dklog:log-type "tuple")
   (with-slots (types) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -846,7 +859,7 @@ definitions are expanded, and the translation becomes too large."
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
-  (dk-log-type "subtype")
+  (dklog:log-type "subtype")
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -862,7 +875,7 @@ definitions are expanded, and the translation becomes too large."
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
 type."
-  (dk-log-type "expr-as-type")
+  (dklog:log-type "expr-as-type")
   (with-slots (expr) te
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -874,14 +887,14 @@ type."
 (defmethod pp-dk (stream (te simple-expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?) without inheriting subtypes. I don't know when it
 can be used."
-  (dk-log-type "simpl-expr-as-type")
+  (dklog:log-type "simpl-expr-as-type")
   (with-slots (expr) te
     (pp-dk stream expr colon-p at-sign-p)))
 
 (defmethod pp-dk (stream (te type-application) &optional colon-p at-sign-p)
   "Prints type application TE to stream STREAM. Used for instance with dependent
 (sub)types `subt(i)` where `subt(i) = {x: ... | f(i)}`."
-  (dk-log-type "type-application")
+  (dklog:log-type "type-application")
   (with-slots (type parameters) te
     (with-parens (stream colon-p)
       (pp-dk stream type t)
@@ -895,13 +908,13 @@ can be used."
 
 (defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
   "Prints function type TE to stream STREAM."
-  (dk-log-type "funtype")
+  (dklog:log-type "funtype")
   (with-slots (domain range) te
     (pprint-funtype domain range stream colon-p)))
 
 (defmethod pp-dk (stream (te fundtype) &optional colon-p at-sign-p)
   "Prints dependent functions with arrow of type (Set, Kind, Kind)"
-  (dk-log-type "fundtype")
+  (dklog:log-type "fundtype")
   (with-parens (stream colon-p)
     (with-slots (domain range) te
       (format stream "~:/pvs:pp-dk/ *> ~:/pvs:pp-dk/" domain range))))
@@ -911,7 +924,7 @@ can be used."
 (defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
   "Print name NAME applying theory formal parameters if needed. Takes care of
 name resolution"
-  (dk-log-expr "name")
+  (dklog:log-expr "name")
   (with-slots (id mod-id actuals) ex
     (cond
       ;; Member of an unpacked tuple: as it has been repacked, we transform this
@@ -956,7 +969,7 @@ name resolution"
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t"
-  (dk-log-expr "lambda-expr")
+  (dklog:log-expr "lambda-expr")
   (with-slots (bindings expression) ex
     (pprint-abstraction expression bindings stream t)))
 
@@ -969,7 +982,7 @@ name resolution"
 (defmethod pp-dk (stream (ex application) &optional colon-p _at-sign-p)
   "Print application EX. The expression EX ``f(e1,e2)(g1,g2)'' will be printed
 as ``f (σcons e1 e2) (σcons g1 g2)''."
-  (dk-log-expr "application")
+  (dklog:log-expr "application")
   (if (null (type ex))
       ;; For some reason, application-judgements end up as application
       ;; expressions. We don’t handle them here.
@@ -996,7 +1009,7 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
 (defmethod pp-dk (stream (ex projection-application)
                   &optional _colon-p _at-sign-p)
   "For projections of the form t`2."
-  (dk-log-ctxts "projection-application" ex)
+  (dklog:log-ctxts "projection-application" ex)
   (with-slots (id index argument) ex
     (let ((len (length (types (type argument))))
           (ident (id argument)))
@@ -1006,7 +1019,7 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
   "Prints tuples ``(e1, e2, e3)'' as ``(σcons e1 (σcons e2 e3))''. Note that we
 use implicit arguments for σcons. Making arguments explicit prevents the
 translation to scale up, because expressions become too verbose."
-  (dk-log-expr "tuple-expr")
+  (dklog:log-expr "tuple-expr")
   (with-slots (exprs) ex
     ;; Tuple types have at least 2 elements (PVS invariant)
     (with-parens (stream colon-p)
@@ -1025,7 +1038,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
-  (dk-log-expr "branch")
+  (dklog:log-expr "branch")
   (destructuring-bind (prop then else) (exprs (argument ex))
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
@@ -1040,7 +1053,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex disequation) &optional colon-p at-sign-p)
   "/=(A, B)"
-  (dk-log-expr "disequation")
+  (dklog:log-expr "disequation")
   (with-parens (stream colon-p)
     (let* ((eq-ty (type (operator ex)))
            (dom (types (domain eq-ty)))
@@ -1055,7 +1068,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
-  (dk-log-expr "equation")
+  (dklog:log-expr "equation")
   (with-parens (stream colon-p)
     (let* ((eq-ty (type (operator ex)))
            (dom (types (domain eq-ty)))
@@ -1070,7 +1083,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
-  (dk-log-expr "conjunction")
+  (dklog:log-expr "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
       (format stream "and ~i~:_~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
@@ -1078,7 +1091,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
   "A AND B"
-  (dk-log-expr "infix-conjunction")
+  (dklog:log-expr "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
       (format stream "~:/pvs:pp-dk/ ∧ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
@@ -1086,7 +1099,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
   "OR(A, B)"
-  (dk-log-expr "disjunction")
+  (dklog:log-expr "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
       (format stream "or ~i~:_~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
@@ -1094,7 +1107,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
   "A OR B"
-  (dk-log-expr "infix-disjunction")
+  (dklog:log-expr "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
       (format stream "~:/pvs:pp-dk/ ∨ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
@@ -1102,7 +1115,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
-  (dk-log-expr "implication")
+  (dklog:log-expr "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
       (format stream "imp ~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
@@ -1110,7 +1123,7 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
   "A IMPLIES B"
-  (dk-log-expr "infix-implication")
+  (dklog:log-expr "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
       (format stream "~:/pvs:pp-dk/ ⊃ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
@@ -1124,19 +1137,19 @@ translation to scale up, because expressions become too verbose."
 
 (defmethod pp-dk (stream (ex negation) &optional colon-p _at-sign-p)
   "NOT(A), there is also a `unary-negation' that represents NOT A."
-  (dk-log-expr "negation")
+  (dklog:log-expr "negation")
   (with-parens (stream colon-p)
     ;; NOTE we might be able to remove parens (see with LP precedence)
     (format stream "¬ ~:/pvs:pp-dk/" (argument ex))))
 
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
-  (dk-log-expr "number")
+  (dklog:log-expr "number")
   ;; PVS uses bignum while lambdapi is limited to 2^30 - 1
   (format stream "~d" ex))
 
 (defmethod pp-dk (stream (ac actual) &optional colon-p at-sign-p)
   "Formal parameters of theories, the `t' in `pred[t]'."
-  (dk-log-expr "actual")
+  (dklog:log-expr "actual")
   (pp-dk stream (expr ac) colon-p at-sign-p))
 
 (defmethod pp-dk (stream (ex bitvector) &optional _colon-p _at-sign-p)
