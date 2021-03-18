@@ -1,4 +1,4 @@
-name: export
+name: typecheck
 
 on:
   push:
@@ -28,11 +28,6 @@ jobs:
         export EMACS="$(command -v emacs)"
         export SBCLISP_HOME="${HOME}/sbcl"
         make >output 2>&1
-
-    - name: translation
-      run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/simple/simple.spec
-        PVS=./pvs ./pvs2dk.sh -s translations/prelude/prelude.spec
 
     - name: lambdapi install
       run: |
@@ -66,10 +61,4 @@ jobs:
       run: |
         eval $(opam env)
         # Files do not typecheck yet
-        PVS=./pvs ./pvs2dk.sh -c -s translations/prelude/prelude.spec || true
-
-    - name: upload files
-      uses: actions/upload-artifact@v2
-      with:
-        name: lp-exports
-        path: translations/*.lp
+        PVS=./pvs ./pvs2dk.sh -c -s translations/prelude/prelude.spec
