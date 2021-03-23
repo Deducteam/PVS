@@ -359,48 +359,31 @@ currification.")
                 pprint-abstraction))
 (defun pprint-abstraction (ex bindings stream &optional wrap)
   "Print expression EX on stream STREAM abstracting arguments in BINDINGS (with
-a λ). Note that the context `*ctx*' is enriched on each printed binding. The
+λs). Note that the context `*ctx*' is enriched on each printed binding. The
 binding is automatically removed from the context thanks to dynamic scoping."
-  (labels
-      ((pprint-binding (id dtype)
-         (declare (type symbol id))
-         (declare (type type-expr dtype))
-         (with-parens (stream t)
-           (pprint-logical-block (stream nil)
-             (pp-sym stream id)
-             (write-string ": " stream)
-             (pprint-newline :fill stream)
-             (let ((dec (if (is-*type*-p dtype) "Ty" "El")))
-               (write-string dec stream))
-             (write-char #\space stream)
-             (pp-dk stream dtype t))))
-       (pprint-abstraction* (term bindings)
-         "Print term TERM abstracting on bindings BINDINGS. Bindings are
-typed if they were typed in PVS (they may be typed by a variable declaration)."
-         (declare (type (or expr type-expr) term))
-         (declare (type (polylist bind-decl) bindings))
-         (if (null bindings)
-             (format stream ", ~:_~/pvs:pp-dk/" term)
-             (with-slots (id declared-type) (car bindings)
-               (if declared-type
-                   (progn
-                     (pprint-binding id declared-type)
-                     (let* ((*ctx* (acons id declared-type *ctx*)))
-                       ;; Print the body with the variable in context
-                       (pprint-abstraction* term (cdr bindings))))
-                   ;; Otherwise, the variable is already declared
-                   (progn
-                     ;; If the type of the binding is not specified,
-                     ;; then the variable must be typed by a x: VAR t
-                     ;; declaration, and hence end up in `*ctx-var*'.
-                     (pprint-binding id (cdr (assoc id *ctx-var*)))
-                     (pprint-abstraction* term (cdr bindings))))))))
-    (if (null bindings)
-        (pp-dk stream ex wrap)
-        (with-parens (stream wrap)
-          (pprint-logical-block (stream nil)
-            (write-string "λ" stream)
-            (pprint-abstraction* ex bindings))))))
+  (if (null bindings)
+      (pp-dk stream ex wrap)
+      (with-parens (stream wrap)
+        (destructuring-bind (hd &rest tl) bindings
+          (write-string "λ " stream)
+          (with-slots (id declared-type) hd
+            (pp-sym stream id)
+            (write-string ": " stream)
+            (pprint-newline :fill stream)
+            (if declared-type
+                (let ((*ctx* (acons id declared-type *ctx*)))
+                  ;; Print the body with the variable in context
+                  (if (is-*type*-p declared-type)
+                      (write-string "Set, " stream)
+                      (format stream "El ~:/pvs:pp-dk/, " declared-type))
+                  ;; Recursive call in `if’ branches for dynamic scoping
+                  (pprint-abstraction ex tl stream))
+                (let ((typ (cdr (assoc id *ctx-var*))))
+                  ;; If the type of the binding is not specified, then the
+                  ;; variable must be typed by a x: VAR t declaration, and hence
+                  ;; end up in `*ctx-var*'.
+                  (format stream "El ~:/pvs:pp-dk/, " typ)
+                  (pprint-abstraction ex tl stream))))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
