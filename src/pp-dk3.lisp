@@ -436,63 +436,29 @@ typed if they were typed in PVS (they may be typed by a variable declaration)."
               (with-parens (stream t)
                 (pprint-abstraction newex (list bd) stream))))))))
 
-;; REVIEW rename into `abstract-thy' or something of the kind
-(declaim (ftype (function (type-expr symbol stream *) null) pprint-prenex))
-(defun pprint-prenex (tex kind stream &optional wrap)
-  "Print type expression TEX of kind KIND with prenex polymorphism on
-the formals of the theory. KIND can be symbol `kind', `set' or `bool'."
-  (labels ((pprint-dtype (ctx)
-             "Print the type that is able to accept elements of context CTX as
-dependent argument to yield type TEX."
-             (declaim (type context ctx))
-             (if (null ctx)
-                 (progn
-                   (pprint-newline :fill stream)
-                   (pp-dk stream tex t))
-                 (destructuring-bind ((id . typ) &rest tl) ctx
-                   (with-parens (stream t)
-                     (case kind
-                       ('kind
-                        (format stream "~:/pvs:pp-dk/ *> " typ)
-                        (pprint-dtype tl))
-                       ('set
-                        (format stream "arrd {~/pvs:pp-dk/} " typ)
-                        (with-parens (stream t)
-                          (format stream "λ ~/pvs:pp-sym/," id)
-                          (pprint-dtype tl)))
-                       ('bool
-                        (format stream "∀ {~/pvs:pp-dk/} " typ)
-                        (with-parens (stream t)
-                          (format stream "λ ~/pvs:pp-sym/," id)
-                          (pprint-dtype tl))))))))
-           (ppqu (qu ctx)
-             "Print quantifier QU and abstract over the variable of car of CTX."
-             (declaim (type string qu))
-             (declaim (type context ctx))
-             (format stream "~a " qu)
-             (with-parens (stream t)
-               (pprint-logical-block (stream nil)
-                 (format stream "λ ~/pvs:pp-sym/, " (caar ctx))
-                 (pprint-newline :fill stream)
-                 (ppp (cdr ctx)))))
-           (ppp (ctx)
-             "Print quantifier and abstract on car of CTX or abstract on formals
-of the theory."
-             (declaim (type context ctx))
-             (if
-              (null ctx)
-              (let ((scheme (case kind
-                              ('kind "PxK.lift ")
-                              ('set "PxS.lift ")
-                              ('bool "")))
-                    (ctx-values (thy:values->ctx)))
-                (write-string scheme stream)
-                (pprint-dtype ctx-values))
-              (let ((quant (case kind
-                             ('kind "PxK.∀") ('set "PxS.∀") ('bool "PxP.∀"))))
-                (ppqu quant ctx)))))
-    (with-parens (stream wrap)
-      (ppp (thy:types->ctx)))))
+(declaim (ftype (function (type-expr stream *) null) abstract-thy-actuals))
+(defun abstract-thy-actuals (tex kind stream &optional wrap)
+  "Prints `Π x1: t1, Π x2: t2, ..., Π xn: tn, ξ (TEX)' where
+`((x1, t1), ..., (xn, tn))' is the context made of the actuals of the current
+theory and ξ is determined by KIND which may be 'set, 'prop' or 'kind."
+  (labels
+      ((pprint-actuals (ctx)
+         (if (null ctx)
+             (progn
+               (pprint-newline :fill stream)
+               (case kind
+                 ('kind (write-string "Ty" stream))
+                 ('set (write-string "El" stream))
+                 ('prop (write-string "Prf" stream)))
+               (write-char #\space stream)
+               (pp-dk stream tex t))
+             (destructuring-bind ((id . typ) &rest tl) ctx
+               (format stream "Π ~/pvs:pp-sym/: " id)
+               (if (is-*type*-p typ) (write-string "Set" stream)
+                   (format stream "El ~:/pvs:pp-dk/" tex))
+               (write-string ", " stream)
+               (pprint-actuals tl)))))
+    (pprint-actuals (thy:types->ctx))))
 
 (declaim (ftype (function (symbol stream string) *) pprint-reqopen))
 (defun pprint-reqopen (mod stream &optional root)
@@ -635,8 +601,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:log-decl "type decl")
   (with-slots (id) decl
     (pprint-logical-block (stream nil)
-      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_PxK.El " id)
-      (pprint-prenex *type* 'kind stream t)
+      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_ " id)
+      (abstract-thy-actuals *type* 'kind stream t)
       (write-char #\; stream))
     (fresh-line stream)
     ;; No dynamic scoping because we never remove elements from the signature
@@ -647,7 +613,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:log-decl "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
-      (format stream "symbol ~/pvs:pp-sym/: PxK.El " id)
+      (format stream "symbol ~/pvs:pp-sym/: " id)
       (let* ((args (car (pack-arg-tuple formals)))
              (tys (mapcar #'type-of-expr args))
              (ty (dprod-of-domains tys *type*)))
@@ -657,7 +623,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         ;; formals. Since the arrow *> is not the same as ~>, we use
         ;; `dprod-of-domains' which builds a sequence of `*>'.
         (declare (type type-expr ty))
-        (pprint-prenex ty 'kind stream t))
+        (abstract-thy-actuals ty 'kind stream t))
       (write-string " ≔ " stream)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
@@ -679,8 +645,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "symbol ~/pvs:pp-sym/: " id)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
-      (write-string "PxK.El " stream)
-      (pprint-prenex *type* 'kind stream t)
+      (abstract-thy-actuals *type* 'kind stream t)
       (write-string " ≔ " stream)
       (pprint-newline :fill stream)
       (pprint-abstraction
@@ -713,8 +678,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream " ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
-          (write-string "Prf " stream)
-          (pprint-prenex defn 'bool stream t))
+          (abstract-thy-actuals defn 'prop stream t))
         (fresh-line stream)
         (setf *signature* (cons id *signature*))
         (unless axiomp
@@ -738,8 +702,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
             (format stream "symbol ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
-            (write-string "PxS.El " stream)
-            (pprint-prenex type 'set stream t)
+            (abstract-thy-actuals type 'set stream t)
             (write-string " ≔ " stream)
             (pprint-newline :fill stream)
             (pprint-abstraction definition bindings stream)))
@@ -747,8 +710,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
-          (write-string "PxS.El " stream)
-          (pprint-prenex type 'set stream t)))
+          (abstract-thy-actuals type 'set stream t)))
     (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
 
@@ -765,8 +727,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (format stream "symbol ~/pvs:pp-sym/: " id)
         (pprint-indent :block 2 stream)
         (pprint-newline :fill stream)
-        (write-string "PxS.El " stream)
-        (pprint-prenex type 'set stream t)
+        (abstract-thy-actuals type 'set stream t)
         (pprint-newline :mandatory stream))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
