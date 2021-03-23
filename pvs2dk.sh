@@ -86,24 +86,17 @@ preprocess () {
   done
 }
 
-lp_check () {
-    # Check file that corresponds to a translated theory with lambdapi
-    thy="$1"
-    if lambdapi check -v0 -w "${specdir}/${thy}.lp"; then
-        printf 'Successfully translated %s\n' "$thy"
-    fi
-}
-
-malkasi_check () {
+check () {
     # Check translated file with malkasi: a version of lambdapi that handles
     # subtyping using coercions
     thy="$1"
     if
         malkasi -v0 -w "${specdir}/${thy}.lp"
     then
-        printf 'Successfully translated %s\n' "$thy"
+        printf 'Checked %s\n' "$thy"
     else
         printf 'Invalid theory %s\n' "$thy"
+	exit 1
     fi
 }
 
@@ -126,8 +119,7 @@ else
             translate "${file}" "${line}"
             if ${typecheck}; then
                 preprocess "${line}"
-                malkasi_check "${line}"
-                # lp_check "${line}"
+                check "${line}"
             fi
         else
             printf '[%s:%d]: Invalid line\n' "${specification}" "${LC}"
