@@ -65,7 +65,10 @@ at the beginning of line and terminating line."
       (write-string "require open personoj.encodings.lhol;
 require personoj.encodings.tuple as T;
 require personoj.encodings.sum as S;
-require open personoj.encodings.prenex personoj.encodings.logical;
+require personoj.encodings.prenex.prop as PxP;
+require personoj.encodings.prenex.set as PxS;
+require personoj.encodings.prenex.kind as PxK;
+require open personoj.encodings.logical;
 require open personoj.encodings.pvs_cert;
 require personoj.encodings.equality_tup as Eqtup;
 require open personoj.encodings.builtins personoj.encodings.deptype;" stream)
@@ -479,13 +482,14 @@ of the theory."
              (if
               (null ctx)
               (let ((scheme (case kind
-                              ('kind "scheme_k ")
-                              ('set "scheme_s ")
+                              ('kind "PxK.lift ")
+                              ('set "PxS.lift ")
                               ('bool "")))
                     (ctx-values (thy:values->ctx)))
                 (write-string scheme stream)
                 (pprint-dtype ctx-values))
-              (let ((quant (case kind ('kind "∀K") ('set "∀S") ('bool "∀B"))))
+              (let ((quant (case kind
+                             ('kind "PxK.∀") ('set "PxS.∀") ('bool "PxP.∀"))))
                 (ppqu quant ctx)))))
     (with-parens (stream wrap)
       (ppp (thy:types->ctx)))))
@@ -631,7 +635,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:log-decl "type decl")
   (with-slots (id) decl
     (pprint-logical-block (stream nil)
-      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_El_k " id)
+      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_PxK.El " id)
       (pprint-prenex *type* 'kind stream t)
       (write-char #\; stream))
     (fresh-line stream)
@@ -643,7 +647,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:log-decl "type-eq-decl")
   (with-slots (id type-expr formals) decl
     (pprint-logical-block (stream nil)
-      (format stream "symbol ~/pvs:pp-sym/: El_k " id)
+      (format stream "symbol ~/pvs:pp-sym/: PxK.El " id)
       (let* ((args (car (pack-arg-tuple formals)))
              (tys (mapcar #'type-of-expr args))
              (ty (dprod-of-domains tys *type*)))
@@ -675,7 +679,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "symbol ~/pvs:pp-sym/: " id)
       (pprint-indent :block 2 stream)
       (pprint-newline :fill stream)
-      (write-string "El_k " stream)
+      (write-string "PxK.El " stream)
       (pprint-prenex *type* 'kind stream t)
       (write-string " ≔ " stream)
       (pprint-newline :fill stream)
@@ -716,7 +720,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (unless axiomp
           (format stream "≔ begin~%")
           ;; TODO: export proof
-          (format stream "admit"))
+          (format stream "admitted"))
         (write-char #\; stream)))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
@@ -734,7 +738,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
             (format stream "symbol ~/pvs:pp-sym/: " id)
             (pprint-indent :block 2 stream)
             (pprint-newline :fill stream)
-            (write-string "El_s " stream)
+            (write-string "PxS.El " stream)
             (pprint-prenex type 'set stream t)
             (write-string " ≔ " stream)
             (pprint-newline :fill stream)
@@ -743,7 +747,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-indent :block 2 stream)
           (pprint-newline :fill stream)
-          (write-string "El_s " stream)
+          (write-string "PxS.El " stream)
           (pprint-prenex type 'set stream t)))
     (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
@@ -761,7 +765,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (format stream "symbol ~/pvs:pp-sym/: " id)
         (pprint-indent :block 2 stream)
         (pprint-newline :fill stream)
-        (write-string "El_s " stream)
+        (write-string "PxS.El " stream)
         (pprint-prenex type 'set stream t)
         (pprint-newline :mandatory stream))
       (setf *signature* (cons id *signature*))
