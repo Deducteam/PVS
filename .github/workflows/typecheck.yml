@@ -27,6 +27,7 @@ jobs:
         ./configure
         export EMACS="$(command -v emacs)"
         export SBCLISP_HOME="${HOME}/sbcl"
+        (cd lib || exit 1; patch < prelude.pvs.patch)
         make >output 2>&1
 
     - name: lambdapi install
