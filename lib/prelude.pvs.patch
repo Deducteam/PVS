@@ -1,5 +1,5 @@
 diff --git a/lib/prelude.pvs b/lib/prelude.pvs
-index 767f4804..55ccf47d 100644
+index 767f4804..e9c8a022 100644
 --- a/lib/prelude.pvs
 +++ b/lib/prelude.pvs
 @@ -277,27 +277,27 @@ functions [D, R: TYPE]: THEORY
@@ -108,13 +108,4 @@ index 767f4804..55ccf47d 100644
 +  descends?(seq, Trel): bool = inverts((LAMBDA i, n: i <= n), Trel)(seq)
  
   END sequences
- 
-@@ -6414,7 +6414,7 @@ BEGIN
-     PreservesEq(R) = PreservesEq(EquivClos[X1](R))
- 
-   PreservesEq_is_preserving: LEMMA
--    PreservesEq(R) = preserves(restrict[[X, X], [X1, X1], bool](R), =[Y])
-+    PreservesEq(R) = preserves([X1, X1], bool](R), =[Y])(restrict[[X, X])
- 
- END KernelDefinition
  
