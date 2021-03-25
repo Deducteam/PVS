@@ -561,10 +561,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
   "t: TYPE."
   (dklog:log-decl "type decl")
   (with-slots (id) decl
-    (pprint-logical-block (stream nil)
-      (format stream "constant symbol ~/pvs:pp-sym/: " id)
-      (pprint-thy-formals *type* 'kind stream t)
-      (write-char #\; stream))
+    (format stream "constant symbol ~/pvs:pp-sym/: " id)
+    (pprint-thy-formals *type* 'kind stream t)
+    (write-char #\; stream)
     (fresh-line stream)
     ;; No dynamic scoping because we never remove elements from the signature
     (setf *signature* (cons id *signature*))))
@@ -599,16 +598,15 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:log-decl "type-from-decl")
   (with-slots (id predicate supertype) decl
     ;; PREDICATE is a type declaration
-    (pprint-logical-block (stream nil)
-      (format stream "symbol ~/pvs:pp-sym/: " id)
-      (pprint-thy-formals *type* 'kind stream t)
-      (write-string " ≔ " stream)
-      (pprint-abstraction
-       ;; Build properly the subtype expression for printing
-       (mk-subtype supertype (mk-name-expr (id predicate)))
-       (thy:bind-decl-of-thy)
-       stream)
-      (write-char #\; stream))
+    (format stream "symbol ~/pvs:pp-sym/: " id)
+    (pprint-thy-formals *type* 'kind stream t)
+    (write-string " ≔ " stream)
+    (pprint-abstraction
+     ;; Build properly the subtype expression for printing
+     (mk-subtype supertype (mk-name-expr (id predicate)))
+     (thy:bind-decl-of-thy)
+     stream)
+    (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
@@ -665,9 +663,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
            (*packed-tuples* (cdr form-spec))
            (ctx-thy (thy:bind-decl-of-thy)))
       (format stream "// Recursive declaration ~a~%" id)
-      (pprint-logical-block (stream nil)
-        (format stream "symbol ~/pvs:pp-sym/: " id)
-        (pprint-thy-formals type 'set stream t))
+      (format stream "symbol ~/pvs:pp-sym/: " id)
+      (pprint-thy-formals type 'set stream t)
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
@@ -750,15 +747,14 @@ definitions are expanded, and the translation becomes too large."
   (dklog:log-type "tuple")
   (with-slots (types) te
     (with-parens (stream colon-p)
-      (pprint-logical-block (stream nil)
-        (write-string "T.t " stream)
-        ;; Any tuple type has at least two elements
-        (if (= 2 (length types))
-            (destructuring-bind (s u) types
-              (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/" s u))
-            (destructuring-bind (hd &rest tl) types
-              (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
-                      hd (make-tupletype tl))))))))
+      (write-string "T.t " stream)
+      ;; Any tuple type has at least two elements
+      (if (= 2 (length types))
+          (destructuring-bind (s u) types
+            (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/" s u))
+          (destructuring-bind (hd &rest tl) types
+            (format stream "~:/pvs:pp-dk/ ~:/pvs:pp-dk/"
+                    hd (make-tupletype tl)))))))
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
@@ -931,11 +927,10 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "branch")
   (destructuring-bind (prop then else) (exprs (argument ex))
     (with-parens (stream colon-p)
-      (pprint-logical-block (stream nil)
-        (format stream "if ~:/pvs:pp-dk/ " prop)
-        (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) then)
-        (write-char #\Space stream)
-        (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) else)))))
+      (format stream "if ~:/pvs:pp-dk/ " prop)
+      (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) then)
+      (write-char #\Space stream)
+      (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) else))))
 
 ;;; REVIEW: factorise disequation and equation
 
