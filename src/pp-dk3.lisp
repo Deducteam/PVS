@@ -18,7 +18,7 @@
 (declaim (type (cons (cons symbol string) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
   `((|boolean| . "prop") (|bool| . "prop") (true . "true") (false . "false")
-    (|type| . "{|set|}" ))
+    (|type| . "set" ))
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
 
@@ -60,14 +60,11 @@ at the beginning of line and terminating line."
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (dklog:log-top "Translating ~s" file)
   (with-open-file (stream file :direction :output :if-exists :supersede)
-    (let ((*print-pretty* t)
+    (let ((*print-pretty* nil)
           (*print-right-margin* 78))
       (write-string "require open personoj.encodings.lhol;
 require personoj.encodings.tuple as T;
 require personoj.encodings.sum as S;
-require personoj.encodings.prenex.prop as PxP;
-require personoj.encodings.prenex.set as PxS;
-require personoj.encodings.prenex.kind as PxK;
 require open personoj.encodings.logical;
 require open personoj.encodings.pvs_cert;
 require personoj.encodings.equality_tup as Eqtup;
@@ -369,7 +366,6 @@ binding is automatically removed from the context thanks to dynamic scoping."
           (with-slots (id declared-type) hd
             (pp-sym stream id)
             (write-string ": " stream)
-            (pprint-newline :fill stream)
             (if declared-type
                 (let ((*ctx* (acons id declared-type *ctx*)))
                   ;; Print the body with the variable in context
@@ -380,8 +376,9 @@ binding is automatically removed from the context thanks to dynamic scoping."
                   (pprint-abstraction ex tl stream))
                 (let ((typ (cdr (assoc id *ctx-var*))))
                   ;; If the type of the binding is not specified, then the
-                  ;; variable must be typed by a x: VAR t declaration, and hence
-                  ;; end up in `*ctx-var*'.
+                  ;; variable must be typed by a x: VAR t declaration, and
+                  ;; hence end up in `*ctx-var*'. We do not need to complete
+                  ;; `*ctx*'.
                   (format stream "El ~:/pvs:pp-dk/, " typ)
                   (pprint-abstraction ex tl stream))))))))
 
@@ -395,13 +392,11 @@ binding is automatically removed from the context thanks to dynamic scoping."
               (bd (car bindings)))
           (setf (slot-value newex 'bindings) (cdr bindings))
           (with-parens (stream colon-p)
-            (pprint-logical-block (stream nil)
-              (write-string quant stream)
-              (write-char #\Space stream)
-              ;; Print domain
-              (format stream "{~:/pvs:pp-dk/} " (type-of-expr bd))
-              (with-parens (stream t)
-                (pprint-abstraction newex (list bd) stream))))))))
+            (write-string quant stream)
+            ;; Print domain
+            (format stream " {~:/pvs:pp-dk/} " (type-of-expr bd))
+            (with-parens (stream t)
+              (pprint-abstraction newex (list bd) stream)))))))
 
 (declaim (ftype (function (type-expr stream *) null) pprint-thy-formals))
 (defun pprint-thy-formals (tex kind stream &optional wrap)
@@ -412,7 +407,6 @@ theory and ξ is determined by KIND which may be 'set, 'prop' or 'kind."
       ((pprint-formals (ctx)
          (if (null ctx)
              (progn
-               (pprint-newline :fill stream)
                (case kind
                  ('kind (write-string "Ty" stream))
                  ('set (write-string "El" stream))
@@ -568,7 +562,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:log-decl "type decl")
   (with-slots (id) decl
     (pprint-logical-block (stream nil)
-      (format stream "constant symbol ~/pvs:pp-sym/: ~2i~:_ " id)
+      (format stream "constant symbol ~/pvs:pp-sym/: " id)
       (pprint-thy-formals *type* 'kind stream t)
       (write-char #\; stream))
     (fresh-line stream)
@@ -579,27 +573,24 @@ is returned. ACC contains all symbols before E (in reverse order)."
   "t: TYPE = x, but also domain(f): TYPE = D"
   (dklog:log-decl "type-eq-decl")
   (with-slots (id type-expr formals) decl
-    (pprint-logical-block (stream nil)
-      (format stream "symbol ~/pvs:pp-sym/: " id)
-      (let* ((args (car (pack-arg-tuple formals)))
-             (tys (mapcar #'type-of-expr args))
-             (ty (dprod-of-domains tys *type*)))
-        ;; In the case of type definitions with arguments, the type-expr is
-        ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
-        ;; of type (TYPE, KIND, KIND). So we rebuild back this type based on the
-        ;; formals. Since the arrow *> is not the same as ~>, we use
-        ;; `dprod-of-domains' which builds a sequence of `*>'.
-        (declare (type type-expr ty))
-        (pprint-thy-formals ty 'kind stream t))
-      (write-string " ≔ " stream)
-      (pprint-indent :block 2 stream)
-      (pprint-newline :fill stream)
-      (let* ((form-spec (pack-arg-tuple formals))
-             (*packed-tuples* (cdr form-spec))
-             (ctx (thy:bind-decl-of-thy))
-             (bindings (concatenate 'list ctx (car form-spec))))
-        (pprint-abstraction type-expr bindings stream))
-      (write-char #\; stream))
+    (format stream "symbol ~/pvs:pp-sym/: " id)
+    (let* ((args (car (pack-arg-tuple formals)))
+           (tys (mapcar #'type-of-expr args))
+           (ty (dprod-of-domains tys *type*)))
+      ;; In the case of type definitions with arguments, the type-expr is
+      ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
+      ;; of type (TYPE, KIND, KIND). So we rebuild back this type based on the
+      ;; formals. Since the arrow *> is not the same as ~>, we use
+      ;; `dprod-of-domains' which builds a sequence of `*>'.
+      (declare (type type-expr ty))
+      (pprint-thy-formals ty 'kind stream t))
+    (write-string " ≔ " stream)
+    (let* ((form-spec (pack-arg-tuple formals))
+           (*packed-tuples* (cdr form-spec))
+           (ctx (thy:bind-decl-of-thy))
+           (bindings (concatenate 'list ctx (car form-spec))))
+      (pprint-abstraction type-expr bindings stream))
+    (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
@@ -610,11 +601,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
     ;; PREDICATE is a type declaration
     (pprint-logical-block (stream nil)
       (format stream "symbol ~/pvs:pp-sym/: " id)
-      (pprint-indent :block 2 stream)
-      (pprint-newline :fill stream)
       (pprint-thy-formals *type* 'kind stream t)
       (write-string " ≔ " stream)
-      (pprint-newline :fill stream)
       (pprint-abstraction
        ;; Build properly the subtype expression for printing
        (mk-subtype supertype (mk-name-expr (id predicate)))
@@ -637,21 +625,14 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (declaim (ftype (function (expr) forall-expr) univ-closure))
       (let ((defn (univ-closure definition))
             (axiomp (member spelling '(AXIOM POSTULATE))))
-        (pprint-logical-block (stream nil)
-          (unless axiomp
-            (write-string "opaque" stream)
-            (fresh-line stream))
-          (write-string "symbol" stream)
-          (format stream " ~/pvs:pp-sym/: " id)
-          (pprint-indent :block 2 stream)
-          (pprint-newline :fill stream)
-          (pprint-thy-formals defn 'prop stream t))
-        (fresh-line stream)
+        (unless axiomp (write-string "opaque " stream))
+        (write-string "symbol" stream)
+        (format stream " ~/pvs:pp-sym/ : " id)
+        (pprint-thy-formals defn 'prop stream t)
         (setf *signature* (cons id *signature*))
         (unless axiomp
-          (format stream "≔ begin~%")
           ;; TODO: export proof
-          (format stream "admitted"))
+          (format stream " ≔ begin admitted"))
         (write-char #\; stream)))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
@@ -665,18 +646,12 @@ is returned. ACC contains all symbols before E (in reverse order)."
                (ctx-thy (thy:bind-decl-of-thy))
                (form-bds (car form-proj))
                (bindings (concatenate 'list ctx-thy form-bds)))
-          (pprint-logical-block (stream nil)
-            (format stream "symbol ~/pvs:pp-sym/: " id)
-            (pprint-indent :block 2 stream)
-            (pprint-newline :fill stream)
-            (pprint-thy-formals type 'set stream t)
-            (write-string " ≔ " stream)
-            (pprint-newline :fill stream)
-            (pprint-abstraction definition bindings stream)))
-        (pprint-logical-block (stream nil)
           (format stream "symbol ~/pvs:pp-sym/: " id)
-          (pprint-indent :block 2 stream)
-          (pprint-newline :fill stream)
+          (pprint-thy-formals type 'set stream t)
+          (write-string " ≔ " stream)
+          (pprint-abstraction definition bindings stream))
+        (progn
+          (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-thy-formals type 'set stream t)))
     (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
@@ -692,10 +667,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (format stream "// Recursive declaration ~a~%" id)
       (pprint-logical-block (stream nil)
         (format stream "symbol ~/pvs:pp-sym/: " id)
-        (pprint-indent :block 2 stream)
-        (pprint-newline :fill stream)
-        (pprint-thy-formals type 'set stream t)
-        (pprint-newline :mandatory stream))
+        (pprint-thy-formals type 'set stream t))
       (setf *signature* (cons id *signature*))
       (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
               id (concatenate 'list
@@ -793,15 +765,10 @@ definitions are expanded, and the translation becomes too large."
   (dklog:log-type "subtype")
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
-      (pprint-logical-block (stream nil)
-        (write-string "@psub " stream)
-        (pprint-indent :block 0 stream)
-        (pprint-newline :fill stream)
-        ;; REVIEW: can the supertype be `nil'?
-        (format stream "~:/pvs:pp-dk/ " supertype)
-        (pprint-indent :block 6 stream)
-        (pprint-newline :fill stream)
-        (pp-dk stream predicate t at-sign-p)))))
+      (write-string "@psub " stream)
+      ;; REVIEW: can the supertype be `nil'?
+      (format stream "~:/pvs:pp-dk/ " supertype)
+      (pp-dk stream predicate t at-sign-p))))
 
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
@@ -809,11 +776,10 @@ type."
   (dklog:log-type "expr-as-type")
   (with-slots (expr) te
     (with-parens (stream colon-p)
-      (pprint-logical-block (stream nil)
-        ;; REVIEW: should get the domain of expression E and pass it as first
-        ;; argument of psub
-        (write-string "@psub _ " stream)
-        (pp-dk stream expr t at-sign-p)))))
+      ;; REVIEW: should get the domain of expression E and pass it as first
+      ;; argument of psub
+      (write-string "@psub _ " stream)
+      (pp-dk stream expr t at-sign-p))))
 
 (defmethod pp-dk (stream (te simple-expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?) without inheriting subtypes. I don't know when it
@@ -886,14 +852,13 @@ name resolution"
       ((assoc id *dk-sym-map*) (pp-sym stream id))
       ;; Otherwise, it’s a symbol from an imported theory
       (t (with-parens (stream (consp actuals))
-           (pprint-logical-block (stream nil)
-             (unless (null mod-id)
-               ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
-               ;; require-open’d
-               (pp-sym stream mod-id)
-               (write-char #\. stream))
-             (pp-sym stream id)
-             (format stream "~{ ~:/pvs:pp-dk/~}" actuals)))))))
+           (unless (null mod-id)
+             ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
+             ;; require-open’d
+             (pp-sym stream mod-id)
+             (write-char #\. stream))
+           (pp-sym stream id)
+           (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t"
@@ -918,21 +883,18 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
       (let* ((op (operator* ex))
              (args (arguments* ex)))
         (with-parens (stream colon-p)
-          (pprint-logical-block (stream nil)
-            (pp-dk stream op)
-            (write-char #\space stream)
-            (pprint-indent :block 0 stream)
-            (pprint-newline :fill stream)
-            (loop
-              for a in args do
-                (let ((a (if (<= 2 (length a))
-                            ;; There shouldn't be any additional TCC generated
-                            ;; by `make!-tuple-expr', but who knows.
-                            ;; REVIEW: use mk-tuple-expr, which doesn't
-                            ;; typecheck?
-                            (make!-tuple-expr a) (car a))))
-                  (pp-dk stream a t)
-                  (write-char #\space stream))))))))
+          (pp-dk stream op)
+          (write-char #\space stream)
+          (loop
+            for a in args do
+              (let ((a (if (<= 2 (length a))
+                           ;; There shouldn't be any additional TCC generated
+                           ;; by `make!-tuple-expr', but who knows.
+                           ;; REVIEW: use mk-tuple-expr, which doesn't
+                           ;; typecheck?
+                           (make!-tuple-expr a) (car a))))
+                (pp-dk stream a t)
+                (write-char #\space stream)))))))
 
 (defmethod pp-dk (stream (ex projection-application)
                   &optional _colon-p _at-sign-p)
@@ -970,12 +932,10 @@ translation to scale up, because expressions become too verbose."
   (destructuring-bind (prop then else) (exprs (argument ex))
     (with-parens (stream colon-p)
       (pprint-logical-block (stream nil)
-        (format stream "if ~:/pvs:pp-dk/ ~2i~:_" prop)
-        (format stream "~<(λ ~a, ~1i~:_~/pvs:pp-dk/)~:>"
-                (list (fresh-var) then))
+        (format stream "if ~:/pvs:pp-dk/ " prop)
+        (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) then)
         (write-char #\Space stream)
-        (format stream "~<(λ ~a, ~1i~:_~/pvs:pp-dk/)~:>"
-                (list (fresh-var) else))))))
+        (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) else)))))
 
 ;;; REVIEW: factorise disequation and equation
 
@@ -1014,7 +974,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "and ~i~:_~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
+      (format stream "and ~:/pvs:pp-dk/ (λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
@@ -1022,7 +982,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∧ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
+      (format stream "~:/pvs:pp-dk/ ∧ (λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
@@ -1030,7 +990,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "or ~i~:_~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
+      (format stream "or ~:/pvs:pp-dk/ (λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
@@ -1038,7 +998,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∨ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
+      (format stream "~:/pvs:pp-dk/ ∨ (λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
@@ -1046,7 +1006,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "imp ~:/pvs:pp-dk/ ~:_(λ ~a, ~/pvs:pp-dk/)"
+      (format stream "imp ~:/pvs:pp-dk/ (λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
@@ -1054,7 +1014,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ⊃ ~i~:_(λ ~a, ~/pvs:pp-dk/)"
+      (format stream "~:/pvs:pp-dk/ ⊃ (λ ~a, ~/pvs:pp-dk/)"
               argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex iff) &optional colon-p at-sign-p)
