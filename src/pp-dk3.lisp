@@ -881,16 +881,17 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
         (with-parens (stream colon-p)
           (pp-dk stream op)
           (write-char #\space stream)
-          (loop
-            for a in args do
-              (let ((a (if (<= 2 (length a))
-                           ;; There shouldn't be any additional TCC generated
-                           ;; by `make!-tuple-expr', but who knows.
-                           ;; REVIEW: use mk-tuple-expr, which doesn't
-                           ;; typecheck?
-                           (make!-tuple-expr a) (car a))))
-                (pp-dk stream a t)
-                (write-char #\space stream)))))))
+          (flet ((tup-if-needed (a)
+                   "Transform A into a tuple if its longer than one element."
+                   (if (<= 2 (length a))
+                       ;; There shouldn't be any additional TCC generated
+                       ;; by `make!-tuple-expr', but who knows.
+                       ;; REVIEW: use mk-tuple-expr, which doesn't
+                       ;; typecheck?
+                       (make!-tuple-expr a)
+                       (car a))))
+            (format stream "~{~:/pvs:pp-dk/~^ ~}"
+                    (mapcar #'tup-if-needed args)))))))
 
 (defmethod pp-dk (stream (ex projection-application)
                   &optional _colon-p _at-sign-p)
