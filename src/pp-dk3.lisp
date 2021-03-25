@@ -139,16 +139,12 @@ seek their type into this context only (and not previous LAMBDA bindings).")
   "Context used to translate rewriting definitions. Variables in this context
 are translated to rewriting variables.")
 
-;;;
-;;; We Define here functions to manipualate the formals of the theory. Ideally,
-;;; we'd make a package, but it requires to package a bit everything.
-;;;
-
 (defpackage theory
   (:use :cl :pvs)
   (:documentation "This package provide functions to manipulate formals of
 theories. The list of formals is not updated with dynamic scoping because we
-never need to remove elements from this list.")
+never need to remove elements from this list. Formals are translated as implicit
+arguments.")
   (:nicknames :thy)
   (:export
    :add-type
@@ -352,35 +348,41 @@ currification.")
     (with-parens (stream wrap)
       (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
 
-(declaim (ftype (function (expr (polylist bind-decl) stream *) null)
+(declaim (ftype (function
+                 ((or expr type-expr) (polylist bind-decl) stream * *) null)
                 pprint-abstraction))
-(defun pprint-abstraction (ex bindings stream &optional wrap)
+(defun pprint-abstraction (ex bindings stream &key wrap (impl 0))
   "Print expression EX on stream STREAM abstracting arguments in BINDINGS (with
 λs). Note that the context `*ctx*' is enriched on each printed binding. The
-binding is automatically removed from the context thanks to dynamic scoping."
+binding is automatically removed from the context thanks to dynamic scoping.  If
+IMPL is provided, then the first IMPL bindings are made implicit."
   (if (null bindings)
       (pp-dk stream ex wrap)
       (with-parens (stream wrap)
         (destructuring-bind (hd &rest tl) bindings
           (write-string "λ " stream)
           (with-slots (id declared-type) hd
-            (pp-sym stream id)
-            (write-string ": " stream)
+            (if (> impl 0) (write-string "{" stream))
+            (format stream "~/pvs:pp-sym/: " id)
             (if declared-type
                 (let ((*ctx* (acons id declared-type *ctx*)))
                   ;; Print the body with the variable in context
                   (if (is-*type*-p declared-type)
-                      (write-string "Set, " stream)
-                      (format stream "El ~:/pvs:pp-dk/, " declared-type))
+                      (write-string "Set" stream)
+                      (format stream "El ~:/pvs:pp-dk/" declared-type))
+                  (if (> impl 0) (write-string "}" stream))
+                  (write-string ", " stream)
                   ;; Recursive call in `if’ branches for dynamic scoping
-                  (pprint-abstraction ex tl stream))
+                  (pprint-abstraction ex tl stream :impl (- impl 1)))
                 (let ((typ (cdr (assoc id *ctx-var*))))
                   ;; If the type of the binding is not specified, then the
                   ;; variable must be typed by a x: VAR t declaration, and
                   ;; hence end up in `*ctx-var*'. We do not need to complete
                   ;; `*ctx*'.
-                  (format stream "El ~:/pvs:pp-dk/, " typ)
-                  (pprint-abstraction ex tl stream))))))))
+                  (format stream "El ~:/pvs:pp-dk/" typ)
+                  (if (> impl 0) (write-string "}" stream))
+                  (write-string ", " stream)
+                  (pprint-abstraction ex tl stream :impl (- impl 1)))))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
@@ -414,10 +416,10 @@ theory and ξ is determined by KIND which may be 'set, 'prop' or 'kind."
                (write-char #\space stream)
                (pp-dk stream tex t))
              (destructuring-bind ((id . typ) &rest tl) ctx
-               (format stream "Π ~/pvs:pp-sym/: " id)
+               (format stream "Π {~/pvs:pp-sym/: " id)
                (if (is-*type*-p typ) (write-string "Set" stream)
                    (format stream "El ~:/pvs:pp-dk/" typ))
-               (write-string ", " stream)
+               (write-string "}, " stream)
                (pprint-formals tl)))))
     (pprint-formals (thy:as-ctx))))
 
@@ -588,7 +590,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
            (*packed-tuples* (cdr form-spec))
            (ctx (thy:bind-decl-of-thy))
            (bindings (concatenate 'list ctx (car form-spec))))
-      (pprint-abstraction type-expr bindings stream))
+      (pprint-abstraction type-expr bindings stream :impl (length (thy:as-ctx))))
     (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
 
@@ -605,7 +607,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
      ;; Build properly the subtype expression for printing
      (mk-subtype supertype (mk-name-expr (id predicate)))
      (thy:bind-decl-of-thy)
-     stream)
+     stream
+     :impl (length (thy:as-ctx)))
     (write-char #\; stream)
     (setf *signature* (cons id *signature*))))
 
@@ -647,7 +650,8 @@ is returned. ACC contains all symbols before E (in reverse order)."
           (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-thy-formals type 'set stream t)
           (write-string " ≔ " stream)
-          (pprint-abstraction definition bindings stream))
+          (pprint-abstraction definition bindings stream
+                              :impl (length (thy:as-ctx))))
         (progn
           (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-thy-formals type 'set stream t)))
@@ -831,8 +835,8 @@ name resolution"
        (with-parens (stream (consp (thy:bind-decl-of-thy)))
          (pp-sym stream id)
          (unless (null (thy:bind-decl-of-thy))
-           ;; Apply theory arguments to symbols of signature
-           (format stream " ~{~:/pvs:pp-dk/~^ ~}"
+           ;; Apply theory arguments (as implicit args) to symbols of signature
+           (format stream "~{ {~/pvs:pp-dk/}~}"
                    ;; Print arguments through ‘pp-dk’ because they might be in
                    ;; ‘ctx-local’
                    (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
@@ -853,14 +857,13 @@ name resolution"
              ;; require-open’d
              (pp-sym stream mod-id)
              (write-char #\. stream))
-           (pp-sym stream id)
-           (format stream "~{ ~:/pvs:pp-dk/~}" actuals))))))
+           (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t"
   (dklog:log-expr "lambda-expr")
   (with-slots (bindings expression) ex
-    (pprint-abstraction expression bindings stream t)))
+    (pprint-abstraction expression bindings stream :wrap t)))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∃"))
