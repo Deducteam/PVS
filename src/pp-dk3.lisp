@@ -134,11 +134,6 @@ as a list is exhausted."
   "Context enriched by `var-decl' only. Not typed bound variables of LAMBDAs
 seek their type into this context only (and not previous LAMBDA bindings).")
 
-(declaim (type context *ctx-local*))
-(defparameter *ctx-local* nil
-  "Context used to translate rewriting definitions. Variables in this context
-are translated to rewriting variables.")
-
 (defpackage theory
   (:use :cl :pvs)
   (:documentation "This package provide functions to manipulate formals of
@@ -254,8 +249,7 @@ a function name from where the debug is called)."
   (dk-log nil "  thf:~i~<~a~:>" (list (thy:as-ctx)))
   (dk-log nil "  tst:~i~<~a~:>" (list pvs::*ctx-thy-subtypes*))
   (dk-log nil "  ctx:~i~<~a~:>" (list pvs::*ctx*))
-  (dk-log nil "  tup:~i~<~a~:>" (list pvs::*packed-tuples*))
-  (dk-log nil "  lct:~i~<~a~:>" (list pvs::*ctx-local*)))
+  (dk-log nil "  tup:~i~<~a~:>" (list pvs::*packed-tuples*)))
 
 (in-package :pvs)
 
@@ -659,27 +653,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
-  ;; TODO not valid, the translated may be not terminating
-  (dklog:log-decl "def")
-  (dklog:log-ctxts "def-decl")
-  (with-slots (id definition formals type) decl
-    (let* ((form-spec (pack-arg-tuple formals))
-           (*packed-tuples* (cdr form-spec))
-           (ctx-thy (thy:bind-decl-of-thy)))
-      (format stream "// Recursive declaration ~a~%" id)
-      (format stream "symbol ~/pvs:pp-sym/: " id)
-      (pprint-thy-formals type 'set stream t)
-      (setf *signature* (cons id *signature*))
-      (format stream "rule ~:/pvs:pp-sym/ ~{$~/pvs:pp-sym/ ~}~_ ↪ ~:_"
-              id (concatenate 'list
-                              (mapcar #'car (thy:as-ctx))
-                              (mapcar #'id (car form-spec))))
-      (let ((*ctx-local*
-              (concatenate 'list
-                           (ctx-of-bindings (car form-spec))
-                           (thy:as-ctx)))
-            (*ctx* nil))
-        (pp-dk stream definition colon-p at-sign-p)))))
+  (error "Recursive function definitions are not handled yet."))
 
 (defmethod pp-dk (stream (decl conversion-decl) &optional colon-p at-sign-p)
   "CONVERSION elt, there are conversion(plus|minus)-decl as well."
@@ -711,15 +685,9 @@ See parse.lisp:826"
 
 (defmethod pp-dk (stream (decl expr-judgement) &optional colon-p _at-sign-p)
   (dklog:log-ctxts "expr-judgement")
-  (with-slots (id expr free-parameters) decl
-    (let
-        ;; See classes-decl.lisp:656
-        ((exp (first expr))
-         (typ (second expr)))
-      (format stream "// ~a~%" free-parameters)
-      (format stream "// @cast _ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/ P :-~&" typ exp)
-      (format stream "//   free-param = ...~&")
-      (format stream "//   P = ~/pvs:pp-sym/ freeparams" id))))
+  (with-slots (id) decl
+    ;; See classes-decl.lisp:656
+    (format stream "// expr-judgement: ~/pvs:pp-sym/" id)))
 
 (defmethod pp-dk (stream (decl subtype-judgement) &optional colon-p _at-sign-p)
   (with-slots (id declared-subtype subtype) decl
@@ -830,7 +798,6 @@ name resolution"
        (destructuring-bind (v n m . w) (assoc id *packed-tuples*)
          (pprint-proj-spec w n m stream)))
       ((assoc id *ctx*) (pp-sym stream id))
-      ((assoc id *ctx-local*) (format stream "$~/pvs:pp-sym/" id))
       ((member id *signature*)
        (with-parens (stream (consp (thy:bind-decl-of-thy)))
          (pp-sym stream id)
