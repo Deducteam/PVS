@@ -560,7 +560,6 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (format stream "constant symbol ~/pvs:pp-sym/: " id)
     (pprint-thy-formals *type* 'kind stream t)
     (write-char #\; stream)
-    (fresh-line stream)
     ;; No dynamic scoping because we never remove elements from the signature
     (setf *signature* (cons id *signature*))))
 
@@ -624,11 +623,11 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (write-string "symbol" stream)
         (format stream " ~/pvs:pp-sym/ : " id)
         (pprint-thy-formals defn 'prop stream t)
-        (setf *signature* (cons id *signature*))
         (unless axiomp
           ;; TODO: export proof
           (format stream " ≔ begin admitted"))
-        (write-char #\; stream)))))
+        (write-char #\; stream)
+        (setf *signature* (cons id *signature*))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (dklog:log-decl "const")

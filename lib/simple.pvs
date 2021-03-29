@@ -52,9 +52,9 @@ BEGIN
   succ_pred: AXIOM succ(pred(n)) = n
   pred_lt: AXIOM lt(pred(n), n)
   pred_ze: AXIOM lt(zero, n)
-  triangle(n: nat): RECURSIVE nat =
-              IF n = zero then zero else triangle(pred(n)) endif
-              measure n BY lt;
+  % triangle(n: nat): RECURSIVE nat =
+  %             IF n = zero then zero else triangle(pred(n)) endif
+  %             measure n BY lt;
 
   % Judgements
   succ_nz: JUDGEMENT succ(n: nznat) HAS_TYPE nznat
