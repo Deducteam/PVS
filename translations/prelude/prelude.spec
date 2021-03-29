@@ -83,7 +83,7 @@ finite_sets
 restrict_set_props
 extend_set_props
 function_image_aux
-function_iterate
+#function_iterate # Recursive function definition
 sequences
 seq_functions
 #finite_sequences # Use dependent records
