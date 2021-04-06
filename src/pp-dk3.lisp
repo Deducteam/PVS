@@ -648,7 +648,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (progn
           (format stream "symbol ~/pvs:pp-sym/: " id)
           (pprint-thy-formals type 'set stream t)))
-    (write-char #\; stream)
+    (write-string " begin admitted;" stream)
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
@@ -810,9 +810,9 @@ name resolution"
                              (thy:as-ctx)))))))
       ((thy:assoc id) (pp-sym stream id))
       ;; The symbol is a type declared as TYPE FROM in theory parameters,
-      ;; we print it as a predicate sub-type
+      ;; we print the predicate associated
       ((assoc id *ctx-thy-subtypes*)
-       (format stream "(psub ~/pvs:pp-sym/)"
+       (format stream "~:/pvs:pp-sym/"
                (cdr (assoc id *ctx-thy-subtypes*))))
       ;; Symbol of the encoding
       ((assoc id *dk-sym-map*) (pp-sym stream id))
