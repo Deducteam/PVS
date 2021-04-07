@@ -18,7 +18,7 @@
 (declaim (type (cons (cons symbol string) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
   `((|boolean| . "prop") (|bool| . "prop") (true . "true") (false . "false")
-    (|type| . "set" ))
+    (|type| . "Set" ))
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
 
@@ -68,7 +68,7 @@ require personoj.encodings.sum as S;
 require open personoj.encodings.logical;
 require open personoj.encodings.pvs_cert;
 require personoj.encodings.equality_tup as Eqtup;
-require open personoj.encodings.builtins personoj.encodings.deptype;" stream)
+require open personoj.encodings.builtins;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
 
@@ -92,23 +92,6 @@ as a list is exhausted."
   (loop for e1 in l1
         for e2 in l2
         collect (cons e1 e2)))
-
-;; The constructor of dependent types. PVS doesn't introduce it because
-;; everything is typed as TYPE
-(defcl fundtype (funtype))
-(defun mk-fundtype (domain range)
-  "Creates a dependent function type."
-  (make-instance 'fundtype :domain domain :range range))
-
-(declaim (ftype (function (list type-expr) type-expr) dprod-of-domains))
-(defun dprod-of-domains (domains range)
-  "Create the (currified) depent function type from list DOMAINS to RANGE."
-  (labels
-      ((of-domains (domains range)
-         (if (null domains) range
-             (destructuring-bind (hd &rest tl) domains
-               (of-domains tl (mk-fundtype hd range))))))
-    (of-domains (reverse domains) range)))
 
 ;;; Contexts
 ;;;
@@ -394,28 +377,38 @@ IMPL is provided, then the first IMPL bindings are made implicit."
             (with-parens (stream t)
               (pprint-abstraction newex (list bd) stream)))))))
 
-(declaim (ftype (function (type-expr stream *) null) pprint-thy-formals))
+(declaim (ftype (function (type-expr symbol list stream *) null)
+                pprint-product))
+(defun pprint-product (tex kind ctx stream &key wrap (impl 0))
+  "Print `Π x1: t1, Π x2: t2, ..., Π xn: tn, ξ (TEX)' where `(xi, ti)' are the
+components of CTX, and ξ is determined by KIND which may be 'set, 'prop or
+'kind. The first IMPL arguments are made implicit (wrapped into curly
+brackets)."
+  (if (null ctx)
+      (case kind
+        ('kind (pp-dk stream tex))
+        ('set (format stream "El ~:/pvs:pp-dk/" tex))
+        ('prop (format stream "Prf ~:/pvs:pp-dk/" tex)))
+      (destructuring-bind ((id . typ) &rest tl) ctx
+        (write-string "Π " stream)
+        (let ((*ctx* (acons id typ *ctx*)))
+          (if (> impl 0) (write-string "{" stream))
+          (format stream "~/pvs:pp-sym/: " id)
+          (if (is-*type*-p typ)
+              (write-string "Set" stream)
+              (format stream "El ~:/pvs:pp-dk/" typ))
+          (if (> impl 0) (write-string "}" stream))
+          (write-string ", " stream)
+          (pprint-product tex kind tl stream :impl (- impl 1))))))
+
+(declaim (ftype (function (type-expr symbol stream *) null) pprint-thy-formals))
 (defun pprint-thy-formals (tex kind stream &optional wrap)
-  "Prints `Π x1: t1, Π x2: t2, ..., Π xn: tn, ξ (TEX)' where
-`((x1, t1), ..., (xn, tn))' is the context made of the actuals of the current
-theory and ξ is determined by KIND which may be 'set, 'prop' or 'kind."
-  (labels
-      ((pprint-formals (ctx)
-         (if (null ctx)
-             (progn
-               (case kind
-                 ('kind (write-string "Ty" stream))
-                 ('set (write-string "El" stream))
-                 ('prop (write-string "Prf" stream)))
-               (write-char #\space stream)
-               (pp-dk stream tex t))
-             (destructuring-bind ((id . typ) &rest tl) ctx
-               (format stream "Π {~/pvs:pp-sym/: " id)
-               (if (is-*type*-p typ) (write-string "Set" stream)
-                   (format stream "El ~:/pvs:pp-dk/" typ))
-               (write-string "}, " stream)
-               (pprint-formals tl)))))
-    (pprint-formals (thy:as-ctx))))
+  "Print type expression TEX prefixed by as many products as there are formals
+in the theory. Formals are implicit. Parameter KIND behaves as in
+`pprint-product'."
+  (let* ((thy-ctx (thy:as-ctx))
+         (len (length thy-ctx)))
+    (pprint-product tex kind thy-ctx stream :wrap wrap :impl len)))
 
 (declaim (ftype (function (symbol stream string) *) pprint-reqopen))
 (defun pprint-reqopen (mod stream &optional root)
@@ -569,15 +562,13 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (with-slots (id type-expr formals) decl
     (format stream "symbol ~/pvs:pp-sym/: " id)
     (let* ((args (car (pack-arg-tuple formals)))
-           (tys (mapcar #'type-of-expr args))
-           (ty (dprod-of-domains tys *type*)))
+           (ctx (mapcar #'(lambda (a) (cons (id a) (type-of-expr a))) args))
+           (ctx (append (thy:as-ctx) ctx)))
       ;; In the case of type definitions with arguments, the type-expr is
       ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
-      ;; of type (TYPE, KIND, KIND). So we rebuild back this type based on the
-      ;; formals. Since the arrow *> is not the same as ~>, we use
-      ;; `dprod-of-domains' which builds a sequence of `*>'.
-      (declare (type type-expr ty))
-      (pprint-thy-formals ty 'kind stream t))
+      ;; of type (TYPE, KIND, KIND). So we rebuild back this type.
+      (pprint-product
+       *type* 'kind ctx stream :wrap t :impl (length (thy:as-ctx))))
     (write-string " ≔ " stream)
     (let* ((form-spec (pack-arg-tuple formals))
            (*packed-tuples* (cdr form-spec))
