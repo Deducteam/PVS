@@ -313,6 +313,12 @@ necessary."
             ((every #'sane-charp (string sym)) (format stream "~a" sym))
             (t (format stream "{|~a|}" sym))))))
 
+(defun pp-type (stream tex &optional wrap at-sign-p)
+  "Print `Set' if TEX is `*type*', or prefix TEX by `El'."
+  (if (is-*type*-p tex) (write-string "Set" stream)
+      (with-parens (stream wrap)
+        (format stream "El ~:/pvs:pp-dk/" tex))))
+
 (declaim (ftype (function
                  ((or expr type-expr) (polylist bind-decl) stream * *) null)
                 pprint-abstraction))
@@ -332,9 +338,7 @@ IMPL is provided, then the first IMPL bindings are made implicit."
             (if declared-type
                 (let ((*ctx* (acons id declared-type *ctx*)))
                   ;; Print the body with the variable in context
-                  (if (is-*type*-p declared-type)
-                      (write-string "Set" stream)
-                      (format stream "El ~:/pvs:pp-dk/" declared-type))
+                  (pp-type stream declared-type)
                   (if (> impl 0) (write-string "}" stream))
                   (write-string ", " stream)
                   ;; Recursive call in `if’ branches for dynamic scoping
@@ -381,10 +385,7 @@ brackets)."
         (write-string "Π " stream)
         (let ((*ctx* (acons id typ *ctx*)))
           (if (> impl 0) (write-string "{" stream))
-          (format stream "~/pvs:pp-sym/: " id)
-          (if (is-*type*-p typ)
-              (write-string "Set" stream)
-              (format stream "El ~:/pvs:pp-dk/" typ))
+          (format stream "~/pvs:pp-sym/: ~/pvs:pp-type/" id typ)
           (if (> impl 0) (write-string "}" stream))
           (write-string ", " stream)
           (pprint-product tex kind tl stream :impl (- impl 1))))))
