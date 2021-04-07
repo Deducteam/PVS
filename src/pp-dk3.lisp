@@ -109,8 +109,8 @@ as a list is exhausted."
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
-  "Context enriched by LAMBDA bindings and `var-decl'. Variable declarations
-`var-decl' are never removed from the context.")
+  "Context enriched by bound arguments, theory formals and `var-decl'. Variable
+declarations `var-decl' are never removed from the context.")
 
 (declaim (type context *ctx-var*))
 (defparameter *ctx-var* nil
@@ -128,8 +128,7 @@ arguments.")
    :add-type
    :add-val
    :bind-decl-of-thy
-   :as-ctx
-   :assoc))
+   :as-ctx))
 
 (in-package :theory)
 
@@ -155,8 +154,6 @@ declarations for types concatenated with binding declarations for values."
   (mapcar #'pvs::ctxe->bind-decl (reverse *ctx-thy*)))
 
 (defun as-ctx () (reverse *ctx-thy*))
-
-(defun assoc (id) (assoc id *ctx-thy*))
 
 (in-package :pvs)
 
@@ -315,15 +312,6 @@ necessary."
       (cond (dk-sym (format stream "~a" (cdr dk-sym)))
             ((every #'sane-charp (string sym)) (format stream "~a" sym))
             (t (format stream "{|~a|}" sym))))))
-
-(declaim (ftype (function (type-expr type-expr stream *) null) pprint-funtype))
-(defgeneric pprint-funtype (domain range stream &optional wrap)
-  (:documentation "Print the function type from DOMAIN to RANGE, taking care of
-currification.")
-  (:method (domain range stream &optional wrap)
-    "Build the function type [DOMAIN -> RANGE]."
-    (with-parens (stream wrap)
-      (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
 
 (declaim (ftype (function
                  ((or expr type-expr) (polylist bind-decl) stream * *) null)
@@ -765,14 +753,8 @@ can be used."
   "Prints function type TE to stream STREAM."
   (dklog:log-type "funtype")
   (with-slots (domain range) te
-    (pprint-funtype domain range stream colon-p)))
-
-(defmethod pp-dk (stream (te fundtype) &optional colon-p at-sign-p)
-  "Prints dependent functions with arrow of type (Set, Kind, Kind)"
-  (dklog:log-type "fundtype")
-  (with-parens (stream colon-p)
-    (with-slots (domain range) te
-      (format stream "~:/pvs:pp-dk/ *> ~:/pvs:pp-dk/" domain range))))
+    (with-parens (stream colon-p)
+     (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
 
 ;;; Expressions
 
@@ -799,7 +781,6 @@ name resolution"
                    (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
                      (mapcar #'(lambda (st) (mk-name-expr (car st)))
                              (thy:as-ctx)))))))
-      ((thy:assoc id) (pp-sym stream id))
       ;; The symbol is a type declared as TYPE FROM in theory parameters,
       ;; we print the predicate associated
       ((assoc id *ctx-thy-subtypes*)
