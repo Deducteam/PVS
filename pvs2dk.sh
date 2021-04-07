@@ -79,8 +79,13 @@ translate() {
 preprocess () {
   # Preprocess the translation of a theory (the translated theory)
   thy="$1"
-  for pthy in 'booleans' 'equalities' 'notequal' 'if_def' 'boolean_props' \
-              'functions_alt' 'restrict_props'; do
+  # Do not open these theories from prelude
+  do_not_require='booleans equalities notequal if_def boolean_props \
+      functions_alt restrict_props '
+  # These theories are not in the specification
+  commented='extend_bool relations orders orders_alt restrict_order_props \
+      extend_order_props wf_induction measure_induction decl_params'
+  for pthy in ${do_not_require} ${commented}; do
       sed -i -E "s:(require open pvs.prelude.${pthy};)://\1:" \
           "${specdir}/${thy}.lp"
   done

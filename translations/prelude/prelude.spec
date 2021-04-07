@@ -20,22 +20,22 @@ restrict_props
 extend
 #extend_bool
 extend_props
-#extend_func_props
-## K_conversion
-#K_props
-#identity
-#identity_props
-relations
-orders
-orders_alt
-#restrict_order_props # Consist only of judgements
-#extend_order_props   # Consist only of judgements
-wf_induction
-measure_induction
+extend_func_props
+K_conversion
+K_props
+identity
+identity_props
+#relations # Inductive symbol
+#orders # Depends on relations
+#orders_alt # Depends on relations
+#restrict_order_props # Depends on orders
+#extend_order_props # Depends on orders
+#wf_induction # Depends on orders
+#measure_induction # Depends on orders
 epsilons
-decl_params
+#decl_params # Weird theory
 sets
-#sets_lemmas # Module is nil, weird
+sets_lemmas
 function_inverse_def
 function_inverse
 # Requires `assuming' processing
