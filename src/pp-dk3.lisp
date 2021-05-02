@@ -15,6 +15,12 @@
 (deftype polylist (ty)
   `(or (cons ,ty list) null))
 
+(defparameter *print-domains* t
+  "Whether to systematically print domain of abstractions.")
+
+(defparameter *print-implicits* t
+  "Whether to systematically print implicit arguments.")
+
 (declaim (type (cons (cons symbol string) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
   `((|boolean| . "prop") (|bool| . "prop") (true . "true") (false . "false")
@@ -871,9 +877,11 @@ translation to scale up, because expressions become too verbose."
   (destructuring-bind (prop then else) (exprs (argument ex))
     (with-parens (stream colon-p)
       (format stream "if ~:/pvs:pp-dk/ " prop)
-      (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) then)
+      (format stream "(λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
+              (fresh-var) *print-domains* prop then)
       (write-char #\Space stream)
-      (format stream "(λ ~a, ~/pvs:pp-dk/)" (fresh-var) else))))
+      (format stream "(λ ~a~:[~*~;: Prf (¬ ~:/pvs:pp-dk/)~], ~/pvs:pp-dk/)"
+              (fresh-var) *print-domains* prop else))))
 
 ;;; REVIEW: factorise disequation and equation
 
@@ -903,57 +911,70 @@ translation to scale up, because expressions become too verbose."
       (assert (equal tyl tyr) (tyl tyr)
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
-        (format stream
-                "@Eqtup.eq ~:/pvs:pp-dk/ (T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
-                tyl argl argr)))))
+        (format
+         stream
+         "@Eqtup.eq ~:/pvs:pp-dk/ (T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+         tyl argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
   (dklog:log-expr "conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "and ~:/pvs:pp-dk/ (λ ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format
+       stream
+       "and ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk~], ~/pvs:pp-dk/)"
+       argl (fresh-var) argr))))
 
 (defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
   "A AND B"
   (dklog:log-expr "infix-conjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∧ (λ ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format
+       stream
+       "~:/pvs:pp-dk/ ∧ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
+       argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
   "OR(A, B)"
   (dklog:log-expr "disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "or ~:/pvs:pp-dk/ (λ ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format
+       stream
+       "or ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
+       argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
   "A OR B"
   (dklog:log-expr "infix-disjunction")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ∨ (λ ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format
+       stream
+       "~:/pvs:pp-dk/ ∨ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
+       argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
   (dklog:log-expr "implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "imp ~:/pvs:pp-dk/ (λ ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format
+       stream
+       "imp ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
+       argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
   "A IMPLIES B"
   (dklog:log-expr "infix-implication")
   (with-parens (stream colon-p)
     (with-binapp-args (argl argr ex)
-      (format stream "~:/pvs:pp-dk/ ⊃ (λ ~a, ~/pvs:pp-dk/)"
-              argl (fresh-var) argr))))
+      (format
+       stream
+       "~:/pvs:pp-dk/ ⊃ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
+       argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex iff) &optional colon-p at-sign-p)
   "IFF(A, B)"
