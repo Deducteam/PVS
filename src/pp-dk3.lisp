@@ -923,17 +923,7 @@ translation to scale up, because expressions become too verbose."
     (with-binapp-args (argl argr ex)
       (format
        stream
-       "and ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk~], ~/pvs:pp-dk/)"
-       argl (fresh-var) argr))))
-
-(defmethod pp-dk (stream (ex infix-conjunction) &optional colon-p at-sign-p)
-  "A AND B"
-  (dklog:log-expr "infix-conjunction")
-  (with-parens (stream colon-p)
-    (with-binapp-args (argl argr ex)
-      (format
-       stream
-       "~:/pvs:pp-dk/ ∧ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
+       "and ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
@@ -946,16 +936,6 @@ translation to scale up, because expressions become too verbose."
        "or ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
-(defmethod pp-dk (stream (ex infix-disjunction) &optional colon-p at-sign-p)
-  "A OR B"
-  (dklog:log-expr "infix-disjunction")
-  (with-parens (stream colon-p)
-    (with-binapp-args (argl argr ex)
-      (format
-       stream
-       "~:/pvs:pp-dk/ ∨ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
-       argl (fresh-var) *print-domains* argl argr))))
-
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
   "IMPLIES(A, B)"
   (dklog:log-expr "implication")
@@ -964,16 +944,6 @@ translation to scale up, because expressions become too verbose."
       (format
        stream
        "imp ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
-       argl (fresh-var) *print-domains* argl argr))))
-
-(defmethod pp-dk (stream (ex infix-implication) &optional colon-p at-sign-p)
-  "A IMPLIES B"
-  (dklog:log-expr "infix-implication")
-  (with-parens (stream colon-p)
-    (with-binapp-args (argl argr ex)
-      (format
-       stream
-       "~:/pvs:pp-dk/ ⊃ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex iff) &optional colon-p at-sign-p)
