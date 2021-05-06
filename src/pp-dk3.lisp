@@ -880,7 +880,7 @@ translation to scale up, because expressions become too verbose."
       (format stream "(λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
               (fresh-var) *print-domains* prop then)
       (write-char #\Space stream)
-      (format stream "(λ ~a~:[~*~;: Prf (¬ ~:/pvs:pp-dk/)~], ~/pvs:pp-dk/)"
+      (format stream "(λ ~a~:[~*~;: Prf (not ~:/pvs:pp-dk/)~], ~/pvs:pp-dk/)"
               (fresh-var) *print-domains* prop else))))
 
 ;;; REVIEW: factorise disequation and equation
@@ -933,7 +933,7 @@ translation to scale up, because expressions become too verbose."
     (with-binapp-args (argl argr ex)
       (format
        stream
-       "or ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
+       "or ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf (not ~:/pvs:pp-dk/)~],~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
