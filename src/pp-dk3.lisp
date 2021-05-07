@@ -74,7 +74,7 @@ require personoj.encodings.sum as S;
 require open personoj.encodings.logical;
 require open personoj.encodings.pvs_cert;
 require personoj.encodings.equality_tup as Eqtup;
-require open personoj.encodings.builtins;" stream)
+require open personoj.encodings.builtins personoj.encodings.coercions;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
 
@@ -438,9 +438,17 @@ STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
                    (pprint-projs (cdr ps))))))
     (pprint-projs (projs-of-ind index len))))
 
+(declaim (ftype (function (stream obj * *) *) pp-impl))
+(defun pp-impl (stream obj &optional _colon-p at-sign-p)
+  "Print object OBJ to stream STREAM if `*print-implicits*' is true."
+  (when *print-implicits*
+    (write-char #\{ stream)
+    (pp-dk stream obj nil at-sign-p)
+    (write-char #\} stream)))
+
 ;;; Main printing
 
-(declaim (ftype (function (stream syntax * *) null)))
+(declaim (ftype (function (stream syntax * *) *) pp-dk))
 (defgeneric pp-dk (stream obj &optional colon-p at-sign-p)
   (:documentation "Prints object OBJ to stream STREAM. This function can be used
 in `format' funcall `~/pvs:pp-dk3/'. The colon modifier specifies whether
@@ -861,11 +869,13 @@ translation to scale up, because expressions become too verbose."
       (cond
         ((= 2 (length exprs))
          (destructuring-bind (x y) exprs
-           (format stream "T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" x y)))
+           (format stream "T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~
+~:/pvs:pp-dk/ ~:/pvs:pp-dk/" (type x) (type y) x y)))
         ((< 2 (length exprs))
          (destructuring-bind (hd &rest tl) exprs
            (let ((argr (make!-tuple-expr tl)))
-             (format stream "T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" hd argr))))
+             (format stream "T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~
+~:/pvs:pp-dk/ ~:/pvs:pp-dk/" (type hd) (type argr) hd argr))))
         (t (error "Tuple ~a have too few elements." ex))))))
 
 ;; REVIEW in all logical connectors, the generated variables should be added to
@@ -876,7 +886,7 @@ translation to scale up, because expressions become too verbose."
   (dklog:log-expr "branch")
   (destructuring-bind (prop then else) (exprs (argument ex))
     (with-parens (stream colon-p)
-      (format stream "if ~:/pvs:pp-dk/ " prop)
+      (format stream "if ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ " (type ex) prop)
       (format stream "(λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
               (fresh-var) *print-domains* prop then)
       (write-char #\Space stream)
@@ -897,8 +907,9 @@ translation to scale up, because expressions become too verbose."
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
         (format stream
-                "@Eqtup.neq ~:/pvs:pp-dk/ (T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
-                tyl argl argr)))))
+                "@Eqtup.neq ~:/pvs:pp-dk/ ~
+(T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+                tyl (type argl) (type argr) argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
   "=(A, B)"
@@ -913,8 +924,9 @@ translation to scale up, because expressions become too verbose."
       (with-binapp-args (argl argr ex)
         (format
          stream
-         "@Eqtup.eq ~:/pvs:pp-dk/ (T.cons ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
-         tyl argl argr)))))
+         "@Eqtup.eq ~:/pvs:pp-dk/ ~
+(T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+         tyl (type argl) (type argr) argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
   "AND(A, B)"
