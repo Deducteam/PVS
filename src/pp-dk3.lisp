@@ -624,7 +624,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (setf *signature* (cons id *signature*))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
-  (dklog:log-decl "const")
+  (dklog:log-decl "const: ~S" (id decl))
   (dklog:log-ctxts "const-decl")
   (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
@@ -813,8 +813,9 @@ name resolution"
            (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
-  "LAMBDA (x: T): t"
-  (dklog:log-expr "lambda-expr")
+  "LAMBDA (x: T): t. In some cases, {x | p} is a lambda-expr as well (for
+instance in bv_arith_nat_defs.>=)."
+  (dklog:log-expr "lambda-expr ~a" ex)
   (with-slots (bindings expression) ex
     (pprint-abstraction expression bindings stream :wrap t)))
 

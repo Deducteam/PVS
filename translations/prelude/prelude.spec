@@ -118,11 +118,13 @@ bv_bitwise
 empty_bv
 bv_caret
 mod
-bv_arith_nat_defs
+# (1) Sometimes, expression {k | p} ends up as a lambda-expr, in those cases,
+# the translator fails
+#bv_arith_nat_defs # Weird construction, failure on >= because of (1)
 bv_int_defs
 #bv_arithmetic_defs # Recursive functions
 bv_extend_defs
-integertypes
+#integertypes # Failure because of (1)
 # infinite_sets_def # Macros
 #finite_sets_of_sets # Recursive functions
 EquivalenceClosure
