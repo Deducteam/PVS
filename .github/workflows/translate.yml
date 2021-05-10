@@ -15,7 +15,7 @@ jobs:
 
     - name: sbcl setup
       run: |
-        sudo apt install --yes emacs ksh
+        sudo apt install --yes emacs ksh bmake
         url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
         cd ${HOME} || exit 1
         curl "$url" -L | tar jx
@@ -32,11 +32,11 @@ jobs:
 
     - name: unit tests
       run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/simple/simple.spec
+        bmake -C translations/simple translate
 
     - name: prelude
       run: |
-        PVS=./pvs ./pvs2dk.sh -s translations/prelude/prelude.spec
+        bmake -C translations/prelude translate
 
     - name: upload files
       uses: actions/upload-artifact@v2
