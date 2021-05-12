@@ -1,4 +1,5 @@
-PVS2DK = ../pvs2dk.sh
+PVSPATH != realpath ../..
+PVS2DK   = ../pvs2dk.sh
 
 THEORIES =\
 naturals \
@@ -21,6 +22,7 @@ tuples \
 dep_tuple \
 linear_form \
 tfrom \
+constant_param \
 exprastype \
 depsubtype \
 expandeddefs
@@ -31,8 +33,8 @@ translate: ${THEORIES:C/$/.lp/}
 
 .for th in ${THEORIES}
 ${th}.lp:
-	PVSPATH=../../ ${PVS2DK} -f lib/simple.pvs -t ${.TARGET:R} \
--o translations/simple/${.TARGET} > /dev/null
+	PVSPATH=${PVSPATH} ${PVS2DK} -f ${PVSPATH}/lib/simple.pvs -t ${.TARGET:R} \
+-o ${PVSPATH}/translations/simple/${.TARGET} > /dev/null
 .endfor
 
 .include "../lambdapi.mk"

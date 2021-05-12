@@ -8,10 +8,6 @@
 
 set -eufo pipefail
 
-# Emacs lisp wrapper, relatively to PVSPATH
-PVSWRAP="translations/pvs2dkwrap.el"
-
-
 theory=""
 file=""
 output=""
@@ -37,13 +33,14 @@ USAGE+="[v:verbose]#[verbose:=3?Verbosity level.]"
 USAGE+=$'\n\n\n\n'
 while getopts "${USAGE}" o; do
     case "$o" in
-        f) file="${OPTARG}" ;;
+        f) file="$(realpath "${OPTARG}")" ;;
         t) theory="${OPTARG}" ;;
-	o) output="${OPTARG}" ;;
+        o) output="${OPTARG}" ;;
         v) verbose="${OPTARG}"
     esac
 done
+output="$(realpath $(dirname ${output}))/$(basename ${output})"
 
-(cd ${PVSPATH:?PVSPATH is not set} || exit 1 
-./pvs -batch -Q -v "${verbose}" -l "${PVSWRAP}" -- \
-	"${file}" "${theory}" "${output}")
+pvscmd="(prettyprint-dedukti \"${file}#${theory}\" \"${output}\")"
+(cd ${PVSPATH:?'PVSPATH not set'} || exit 1
+ bin/ix86_64-Linux/runtime/pvs-sbclisp --eval "${pvscmd}" --quit)

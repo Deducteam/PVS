@@ -24,7 +24,8 @@ make functions.lpo
 ```
 
 The theories of the Prelude are registered in the file `theories`. In this file,
-each line is a theory. One-line comments can be inserted with character `#`.
+each line is a theory. One-line comments can be inserted with character `#` *at
+the beginning of the file*.
 If a theory name is prefixed with a dash `-`, the theory is not translated nor
 type-checked. Instead, an empty file can be created with the name of the theory
 using `mk_dummy.sh`.  This allows to translate and type check theories that are

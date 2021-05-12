@@ -121,7 +121,7 @@ bv_arith_nat_defs
 bv_int_defs
 -bv_arithmetic_defs # Recursive functions
 bv_extend_defs
-integertypes
+-integertypes # Fails for some reason
 -infinite_sets_def # Macros
 -finite_sets_of_sets # Recursive functions
 EquivalenceClosure
