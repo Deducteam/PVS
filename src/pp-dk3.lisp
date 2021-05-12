@@ -600,7 +600,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (setf *signature* (cons id *signature*))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
-  (dklog:log-decl "formula")
+  (dklog:log-decl "formula: ~S" (id decl))
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
     (flet ((univ-closure (ex)
@@ -727,9 +727,21 @@ definitions are expanded, and the translation becomes too large."
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
       (write-string "@psub " stream)
-      ;; REVIEW: can the supertype be `nil'?
+      (assert (not (null supertype)) (supertype) "Supertype of ~S is nil" te)
       (format stream "~:/pvs:pp-dk/ " supertype)
       (pp-dk stream predicate t at-sign-p))))
+
+(defmethod pp-dk (stream (te set-expr) &optional colon-p at-sign-p)
+  "{n: nat | p(x)}, `set-expr' is a subtype of `lambda-expr'"
+  (dklog:log-type "set-expr")
+  (with-slots (expression bindings) te
+    ;; `binding' should contain one binding
+    (assert (consp bindings) (bindings) "Bindings of set-expr ~S is empty" te)
+    (with-slots (id) (car bindings)
+      ;; NOTE: the binding is untyped
+      (with-parens (stream colon-p)
+        (format stream "psub (λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/)"
+                id expression)))))
 
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
@@ -737,10 +749,9 @@ type."
   (dklog:log-type "expr-as-type")
   (with-slots (expr) te
     (with-parens (stream colon-p)
-      ;; REVIEW: should get the domain of expression E and pass it as first
-      ;; argument of psub
-      (write-string "@psub _ " stream)
-      (pp-dk stream expr t at-sign-p))))
+      ;; REVIEW: get the domain of expression E and pass it as first argument of
+      ;; psub
+      (format stream "psub ~:/pvs:pp-dk/" expr))))
 
 (defmethod pp-dk (stream (te simple-expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?) without inheriting subtypes. I don't know when it
@@ -769,7 +780,7 @@ can be used."
   (dklog:log-type "funtype")
   (with-slots (domain range) te
     (with-parens (stream colon-p)
-     (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
+      (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
 
 ;;; Expressions
 
