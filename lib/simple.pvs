@@ -25,6 +25,7 @@ BEGIN
   % Constant declaration
   one: nat = succ(zero)
   double : [nat -> nat] = LAMBDA (n: nat): plus(n, n)
+  triple(x: nat): nat % With parameter
 
   % Proposition
   z_not_succ: AXIOM FORALL (n: nat): succ(n) /= zero
@@ -231,6 +232,14 @@ tfrom[t: TYPE, u: TYPE FROM t]: THEORY
 BEGIN
   value: u
 END tfrom
+
+constant_param: THEORY
+BEGIN
+  T: TYPE
+  U: TYPE
+  p: VAR [T -> bool]
+  fun(p: [U -> bool]): (p)
+END constant_param
 
 exprastype: THEORY
 BEGIN

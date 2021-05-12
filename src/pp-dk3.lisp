@@ -775,12 +775,26 @@ can be used."
         (pprint-exit-if-list-exhausted)
         (write-char #\space stream)))))
 
-(defmethod pp-dk (stream (te funtype) &optional colon-p at-sign-p)
+(defgeneric pprint-funtype (domain range stream &optional wrap)
+  (:documentation "Print function type from type DOMAIN to type RANGE on stream
+STREAM."))
+
+(defmethod pprint-funtype ((domain dep-binding) range stream &optional wrap)
+  (with-slots (id declared-type) domain
+    (with-parens (stream wrap)
+      (format stream "arrd ~:/pvs:pp-dk/ " declared-type)
+      (pprint-abstraction
+       range (list (mk-bind-decl id declared-type)) stream :wrap t))))
+
+(defmethod pprint-funtype (domain range stream &optional wrap)
+  (with-parens (stream wrap)
+    (format stream "~:/pvs:pp-dk/ ~~> ~/pvs:pp-dk/" domain range)))
+
+(defmethod pp-dk (stream (te funtype) &optional colon-p _at-sign-p)
   "Prints function type TE to stream STREAM."
   (dklog:log-type "funtype")
   (with-slots (domain range) te
-    (with-parens (stream colon-p)
-      (format stream "~:/pvs:pp-dk/ ~~> ~:_~/pvs:pp-dk/" domain range))))
+    (pprint-funtype domain range stream colon-p)))
 
 ;;; Expressions
 
