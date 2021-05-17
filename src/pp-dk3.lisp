@@ -617,9 +617,11 @@ is returned. ACC contains all symbols before E (in reverse order)."
         (write-string "symbol" stream)
         (format stream " ~/pvs:pp-sym/ : " id)
         (pprint-thy-formals defn 'prop stream t)
+        (write-char #\Space stream)
         (unless axiomp
           ;; TODO: export proof
-          (format stream " ≔ begin admitted"))
+          (write-string "≔ " stream))
+        (write-string "begin admitted" stream)
         (write-char #\; stream)
         (setf *signature* (cons id *signature*))))))
 
