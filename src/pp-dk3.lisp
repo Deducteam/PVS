@@ -734,15 +734,16 @@ definitions are expanded, and the translation becomes too large."
       (pp-dk stream predicate t at-sign-p))))
 
 (defmethod pp-dk (stream (te set-expr) &optional colon-p at-sign-p)
-  "{n: nat | p(x)}, `set-expr' is a subtype of `lambda-expr'"
+  "{n: nat | p(x)}, but an expression, it's only syntactic sugar for LAMBDA (n:
+nat): p(x)"
   (dklog:log-type "set-expr")
   (with-slots (expression bindings) te
     ;; `binding' should contain one binding
     (assert (consp bindings) (bindings) "Bindings of set-expr ~S is empty" te)
     (with-slots (id) (car bindings)
-      ;; NOTE: the binding is untyped
+      ;; NOTE: the binding is untyped, can we merge with `lambda-expr'?
       (with-parens (stream colon-p)
-        (format stream "psub (λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/)"
+        (format stream "λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/"
                 id expression)))))
 
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
