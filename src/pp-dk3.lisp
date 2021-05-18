@@ -659,6 +659,28 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (write-string " begin admitted;" stream)
     (setf *signature* (cons id *signature*))))
 
+;; REVIEW: a lot of duplication between inductive-decl and const-decl, but
+;; inductive decl is not yet handled as it should
+(defmethod pp-dk (stream (decl inductive-decl) &optional colon-p at-sign-p)
+  (dklog:log-decl "inductive: ~S" (id decl))
+  (with-slots (id type definition formals) decl
+    (format stream "// Inductive definition ~a~%" id)
+    (let* ((form-proj (pack-arg-tuple formals))
+           (*packed-tuples* (cdr form-proj))
+           (ctx-thy (thy:bind-decl-of-thy))
+           (form-bds (car form-proj))
+           (bindings (concatenate 'list ctx-thy form-bds)))
+      (format stream "symbol ~/pvs:pp-sym/:" id)
+      (pprint-thy-formals type 'set stream t)
+      ;; TODO inductive definitions are not handled yet, they are axiomatised
+      (write-string "/*" stream)        ;Comment definition
+      (write-string " ≔ " stream)
+      (pprint-abstraction definition bindings stream
+                          :impl (length (thy:as-ctx)))
+      (write-string "*/" stream)        ;End of definition comment
+      (write-string " begin admitted;" stream)
+      (setf *signature* (cons id *signature*)))))
+
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (error "Recursive function definitions are not handled yet."))
 
