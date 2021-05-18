@@ -306,6 +306,12 @@ creating a fresh variable that stand for a tuple."
              tl :vars (cons bd vars)
              :projspec (concatenate 'list spec projspec)))))))
 
+(declaim (ftype (function (bind-decl list) list) extend-context))
+(defun extend-context (bd ctx)
+  "Extend context CTX with binding declaration BD (if it is typed)."
+  (with-slots (id declared-type) bd
+    (if declared-type (acons id declared-type ctx) ctx)))
+
 ;;; Specialised printing functions
 
 (declaim (ftype (function (stream symbol * *) null) pp-sym))
@@ -325,6 +331,27 @@ necessary."
       (with-parens (stream wrap)
         (format stream "El ~:/pvs:pp-dk/" tex))))
 
+(declaim
+ (ftype (function (bind-decl stream &optional boolean) *) pprint-binding))
+(defun pprint-bind-decl (bd stream &optional impl)
+  "Print binding BD as id: type to stream STREAM between curly braces if IMPL is
+true."
+  (when impl (write-char #\{ stream))
+  (with-slots (id declared-type) bd
+    (pp-sym stream id)
+    (write-char #\: stream)
+    (if declared-type
+        (let ((*ctx* (acons id declared-type *ctx*)))
+          ;; Print the body with the variable in context
+          (pp-type stream declared-type))
+        (let ((typ (cdr (assoc id *ctx-var*))))
+          ;; If the type of the binding is not specified, then the
+          ;; variable must be typed by a x: VAR t declaration, and
+          ;; hence end up in `*ctx-var*'. We do not need to complete
+          ;; `*ctx*'.
+          (format stream "El ~:/pvs:pp-dk/" typ))))
+  (when impl (write-char #\} stream)))
+
 (declaim (ftype (function
                  ((or expr type-expr) (polylist bind-decl) stream * *) null)
                 pprint-abstraction))
@@ -338,30 +365,15 @@ IMPL is provided, then the first IMPL bindings are made implicit."
       (with-parens (stream wrap)
         (destructuring-bind (hd &rest tl) bindings
           (write-string "λ " stream)
-          (with-slots (id declared-type) hd
-            (if (> impl 0) (write-string "{" stream))
-            (format stream "~/pvs:pp-sym/: " id)
-            (if declared-type
-                (let ((*ctx* (acons id declared-type *ctx*)))
-                  ;; Print the body with the variable in context
-                  (pp-type stream declared-type)
-                  (if (> impl 0) (write-string "}" stream))
-                  (write-string ", " stream)
-                  ;; Recursive call in `if’ branches for dynamic scoping
-                  (pprint-abstraction ex tl stream :impl (- impl 1)))
-                (let ((typ (cdr (assoc id *ctx-var*))))
-                  ;; If the type of the binding is not specified, then the
-                  ;; variable must be typed by a x: VAR t declaration, and
-                  ;; hence end up in `*ctx-var*'. We do not need to complete
-                  ;; `*ctx*'.
-                  (format stream "El ~:/pvs:pp-dk/" typ)
-                  (if (> impl 0) (write-string "}" stream))
-                  (write-string ", " stream)
-                  (pprint-abstraction ex tl stream :impl (- impl 1)))))))))
+          (pprint-bind-decl hd stream (> impl 0))
+          (write-char #\, stream)
+          (let ((*ctx* (extend-context hd *ctx*)))
+            (pprint-abstraction ex tl stream :impl (- impl 1)))))))
 
 (declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
                 pp-quantifier))
 (defun pp-quantifier (stream expr &optional colon-p at-sign-p quant)
+  "Print binding expression EXPR to stream STREAM with QUANT as binder."
   (with-slots (bindings expression) expr
     (if (null bindings)
         (pp-dk stream expression colon-p at-sign-p)
@@ -388,13 +400,13 @@ brackets)."
         ('set (format stream "El ~:/pvs:pp-dk/" tex))
         ('prop (format stream "Prf ~:/pvs:pp-dk/" tex)))
       (destructuring-bind ((id . typ) &rest tl) ctx
-        (write-string "Π " stream)
-        (let ((*ctx* (acons id typ *ctx*)))
-          (if (> impl 0) (write-string "{" stream))
-          (format stream "~/pvs:pp-sym/: ~/pvs:pp-type/" id typ)
-          (if (> impl 0) (write-string "}" stream))
-          (write-string ", " stream)
-          (pprint-product tex kind tl stream :impl (- impl 1))))))
+        (let ((bd (mk-bind-decl id typ)))
+          (write-char #\Π stream)
+          (write-char #\space stream)
+          (pprint-bind-decl bd stream (> impl 0))
+          (write-char #\, stream)
+          (let ((*ctx* (extend-context bd *ctx*)))
+            (pprint-product tex kind tl stream :impl (- impl 1)))))))
 
 (declaim (ftype (function (type-expr symbol stream *) null) pprint-thy-formals))
 (defun pprint-thy-formals (tex kind stream &optional wrap)
