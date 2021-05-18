@@ -853,11 +853,13 @@ name resolution"
            (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
-  "LAMBDA (x: T): t. In some cases, {x | p} is a lambda-expr as well (for
-instance in bv_arith_nat_defs.>=)."
+  "LAMBDA (x: T): t."
   (dklog:log-expr "lambda-expr ~a" ex)
   (with-slots (bindings expression) ex
-    (pprint-abstraction expression bindings stream :wrap t)))
+    ;; The bindings of a lambda represent a unique tuple
+    (destructuring-bind (bindings . projspecs) (pack-arg-tuple (list bindings))
+      (let ((*packed-tuples* (append projspecs *packed-tuples*)))
+        (pprint-abstraction expression bindings stream :wrap colon-p)))))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∃"))

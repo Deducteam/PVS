@@ -268,3 +268,11 @@ BEGIN
   alpha: TYPE = {x: iota | rec?(x)}
   f: [alpha -> alpha]
 END expandeddefs
+
+lambda_tup: THEORY
+BEGIN
+  T: TYPE
+  f: [[T, T] -> T] = LAMBDA (x: T, y: T): x
+  % A lambda with several bindings binds one tuple
+  % g: [T -> [T -> T]] = LAMBDA (x: T, y: T): y
+END lambda_tup
