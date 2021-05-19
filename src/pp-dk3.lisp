@@ -875,13 +875,18 @@ name resolution"
            (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals))))))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
-  "LAMBDA (x: T): t."
+  "LAMBDA (x: T): t. The expression LAMBDA x, y: x binds a tuple of two elements
+to its first element."
   (dklog:log-expr "lambda-expr ~a" ex)
   (with-slots (bindings expression) ex
-    ;; The bindings of a lambda represent a unique tuple
-    (destructuring-bind (bindings . projspecs) (pack-arg-tuple (list bindings))
-      (let ((*packed-tuples* (append projspecs *packed-tuples*)))
-        (pprint-abstraction expression bindings stream :wrap colon-p)))))
+    (if
+     (= 1 (length bindings))
+     ;; If there is only one binding, it represents a variable
+     (pprint-abstraction expression bindings stream :wrap colon-p)
+     ;; Otherwise, each variable of the binding is the component of a tuple
+     (destructuring-bind (bindings . projspecs) (pack-arg-tuple (list bindings))
+       (let ((*packed-tuples* (append projspecs *packed-tuples*)))
+         (pprint-abstraction expression bindings stream :wrap colon-p))))))
 
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∃"))
