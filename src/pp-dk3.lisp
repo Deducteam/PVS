@@ -654,6 +654,10 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (write-string " begin admitted;" stream)
     (setf *signature* (cons id *signature*))))
 
+(defmethod pp-dk (stream (decl macro-decl) &optional _colon-p _at-sign-p)
+  "Ignore macro definitions, they are expanded anyway."
+  nil)
+
 ;; REVIEW: a lot of duplication between inductive-decl and const-decl, but
 ;; inductive decl is not yet handled as it should
 (defmethod pp-dk (stream (decl inductive-decl) &optional colon-p at-sign-p)
