@@ -203,7 +203,7 @@ psub u_pred.")
 (declaim (ftype (function (string) string) fresh-var))
 (defun fresh-var (&key (prefix ""))
   "Provide a fresh variable name."
-  (let ((var-name (format nil "~apvs~d" prefix *var-count*)))
+  (let ((var-name (format nil "_~av~36r" prefix *var-count*)))
     (incf *var-count*)
     var-name))
 
