@@ -67,12 +67,8 @@ at the beginning of line and terminating line."
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* nil)
           (*print-right-margin* 78))
-      (write-string "require open personoj.lhol;
-require personoj.tuple as T;
-require personoj.sum as S;
-require open personoj.logical;
-require open personoj.pvs_cert;
-require personoj.equality_tup as Eqtup;
+      (write-string "require open personoj.lhol personoj.tuple personoj.sum
+personoj.logical personoj.pvs_cert personoj.eqtup;
 require open personoj.builtins personoj.coercions;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
@@ -437,8 +433,8 @@ STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
 `snd' projections."
              (declare (type integer ind))
              (declare (type integer len))
-             (let ((snd-projs (make-list ind :initial-element "T.cdr")))
-               (if (= ind (- len 1)) snd-projs (cons "T.car" snd-projs))))
+             (let ((snd-projs (make-list ind :initial-element "cdr")))
+               (if (= ind (- len 1)) snd-projs (cons "car" snd-projs))))
            (pprint-projs (ps)
              (declare (type (polylist string) ps))
              (if (null ps)
@@ -747,7 +743,7 @@ definitions are expanded, and the translation becomes too large."
   (dklog:log-type "tuple")
   (with-slots (types) te
     (with-parens (stream colon-p)
-      (write-string "T.t " stream)
+      (write-string "σ " stream)
       ;; Any tuple type has at least two elements
       (if (= 2 (length types))
           (destructuring-bind (s u) types
@@ -938,12 +934,12 @@ translation to scale up, because expressions become too verbose."
       (cond
         ((= 2 (length exprs))
          (destructuring-bind (x y) exprs
-           (format stream "T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~
+           (format stream "cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~
 ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" (type x) (type y) x y)))
         ((< 2 (length exprs))
          (destructuring-bind (hd &rest tl) exprs
            (let ((argr (make!-tuple-expr tl)))
-             (format stream "T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~
+             (format stream "cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~
 ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" (type hd) (type argr) hd argr))))
         (t (error "Tuple ~a have too few elements." ex))))))
 
@@ -976,8 +972,8 @@ translation to scale up, because expressions become too verbose."
               "Equality types ~S and ~S are not equal." tyl tyr)
       (with-binapp-args (argl argr ex)
         (format stream
-                "@Eqtup.neq ~:/pvs:pp-dk/ ~
-(T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+                "@neq ~:/pvs:pp-dk/ ~
+(cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
                 tyl (type argl) (type argr) argl argr)))))
 
 (defmethod pp-dk (stream (ex equation) &optional colon-p at-sign-p)
@@ -993,8 +989,8 @@ translation to scale up, because expressions become too verbose."
       (with-binapp-args (argl argr ex)
         (format
          stream
-         "@Eqtup.eq ~:/pvs:pp-dk/ ~
-(T.cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
+         "@eq ~:/pvs:pp-dk/ ~
+(cons ~:/pvs:pp-impl/ ~:/pvs:pp-impl/ ~:/pvs:pp-dk/ ~:/pvs:pp-dk/)"
          tyl (type argl) (type argr) argl argr)))))
 
 (defmethod pp-dk (stream (ex conjunction) &optional colon-p at-sign-p)
