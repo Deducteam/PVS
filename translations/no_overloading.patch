@@ -1,5 +1,5 @@
 diff --git a/lib/prelude.pvs b/lib/prelude.pvs
-index 767f4804..f8e0977f 100644
+index 767f4804..b078e3c2 100644
 --- a/lib/prelude.pvs
 +++ b/lib/prelude.pvs
 @@ -277,27 +277,27 @@ functions [D, R: TYPE]: THEORY
@@ -40,7 +40,50 @@ index 767f4804..f8e0977f 100644
  
  
  transpose[T1, T2, T3: TYPE]: THEORY
-@@ -810,7 +810,7 @@ sets [T: TYPE]: THEORY
+@@ -562,23 +562,23 @@ orders [T: TYPE]: THEORY
+ 
+   upper_bound?(<)(x, pe): bool = FORALL (y: (pe)): y < x
+ 
+-  upper_bound?(<)(pe)(x): bool = upper_bound?(<)(x, pe)
++  %upper_bound?(<)(pe)(x): bool = upper_bound?(<)(x, pe)
+ 
+   lower_bound?(<)(x, pe): bool = FORALL (y: (pe)): x < y
+ 
+-  lower_bound?(<)(pe)(x): bool = lower_bound?(<)(x, pe)
++  %lower_bound?(<)(pe)(x): bool = lower_bound?(<)(x, pe)
+ 
+   least_upper_bound?(<)(x, pe): bool =
+     upper_bound?(<)(x, pe) AND
+       FORALL y: upper_bound?(<)(y, pe) IMPLIES (x < y OR x = y)
+ 
+-  least_upper_bound?(<)(pe)(x): bool = least_upper_bound?(<)(x, pe)
++  %least_upper_bound?(<)(pe)(x): bool = least_upper_bound?(<)(x, pe)
+ 
+   greatest_lower_bound?(<)(x, pe): bool =
+     lower_bound?(<)(x, pe) AND
+       FORALL y: lower_bound?(<)(y, pe) IMPLIES (y < x OR x = y)
+ 
+-  greatest_lower_bound?(<)(pe)(x): bool = greatest_lower_bound?(<)(x, pe)
++  %greatest_lower_bound?(<)(pe)(x): bool = greatest_lower_bound?(<)(x, pe)
+ 
+  END orders
+ 
+@@ -586,10 +586,10 @@ orders [T: TYPE]: THEORY
+ orders_alt [T: TYPE, < : pred[[T, T]], pe: nonempty_pred[T]]: THEORY
+  BEGIN
+   x: VAR T
+-  upper_bound?: [T -> bool] = upper_bound?(<)(pe)
+-  least_upper_bound?: [T -> bool] = least_upper_bound?(<)(pe)
+-  lower_bound?: [T -> bool] = lower_bound?(<)(pe)
+-  greatest_lower_bound?: [T -> bool] = greatest_lower_bound?(<)(pe)
++  upper_bound?(x: T): bool = upper_bound?(<)(x, pe)
++  least_upper_bound?(x: T): bool = least_upper_bound?(<)(x, pe)
++  lower_bound?(x: T): bool = lower_bound?(<)(x, pe)
++  greatest_lower_bound?(x: T): bool = greatest_lower_bound?(<)(x, pe)
+   
+   least_upper_bound_is_upper_bound: JUDGEMENT
+     (least_upper_bound?) SUBTYPE_OF (upper_bound?)
+@@ -810,11 +810,11 @@ sets [T: TYPE]: THEORY
  
    every(p)(a): bool = FORALL (x:(a)): p(x)
  
@@ -48,6 +91,11 @@ index 767f4804..f8e0977f 100644
 +  % every(p, a): bool = FORALL (x:(a)): p(x)
  
    some(p)(a): bool = EXISTS (x:(a)): p(x)
+ 
+-  some(p, a): bool = EXISTS (x:(a)): p(x)
++  %some(p, a): bool = EXISTS (x:(a)): p(x)
+ 
+   singleton?(a): bool = (EXISTS (x:(a)): (FORALL (y:(a)): x = y))
  
 @@ -1506,35 +1506,35 @@ function_props [T1, T2, T3: TYPE]: THEORY
      image(f2, image(f1, X)) = image(f2 o f1, X)
@@ -106,7 +154,7 @@ index 767f4804..f8e0977f 100644
  
  
  % function_props2 defines the associativity of function composition.  It
-@@ -4529,7 +4529,7 @@ sequences[T: TYPE]: THEORY
+@@ -4529,19 +4529,19 @@ sequences[T: TYPE]: THEORY
  
    every(p)(seq): bool = (FORALL n: p(nth(seq, n)))
  
@@ -115,7 +163,10 @@ index 767f4804..f8e0977f 100644
  
    some(p)(seq): bool = (EXISTS n: p(nth(seq, n)))
  
-@@ -4539,9 +4539,9 @@ sequences[T: TYPE]: THEORY
+-  some(p, seq): bool = (EXISTS n: p(nth(seq, n)))
++  %some(p, seq): bool = (EXISTS n: p(nth(seq, n)))
+ 
+   sequence_induction: LEMMA
      p(nth(seq, 0)) AND (FORALL n: p(nth(seq, n)) IMPLIES p(nth(seq, n + 1)))
        IMPLIES every(p)(seq)
  

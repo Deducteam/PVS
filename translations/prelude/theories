@@ -24,13 +24,13 @@ K_conversion
 K_props
 identity
 identity_props
--relations # Inductive symbol
--orders # Depends on relations
--orders_alt # Depends on relations
--restrict_order_props # Depends on orders
--extend_order_props # Depends on orders
--wf_induction # Depends on orders
--measure_induction # Depends on orders
+relations
+orders
+-orders_alt # Redefine operators of orders
+-restrict_order_props # Only judgements
+-extend_order_props # Only judgements
+wf_induction
+measure_induction
 epsilons
 -decl_params # Weird theory
 sets
