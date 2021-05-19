@@ -28,7 +28,7 @@ jobs:
         export EMACS="$(command -v emacs)"
         export SBCLISP_HOME="${HOME}/sbcl"
         for p in $(ls translations/prelude_patches/ | sort); do
-            patch lib/prelude.pvs "${p}"
+            patch lib/prelude.pvs "translations/prelude_patches/${p}"
         done
         make >output 2>&1
 
