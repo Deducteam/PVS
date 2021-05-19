@@ -1,7 +1,6 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
-;;; TODO non dependent product type with elements of type TYPE
 ;;; TODO module resolution and importing
 ;;; TODO recursive functions
 ;;; TODO assuming sections
@@ -68,13 +67,13 @@ at the beginning of line and terminating line."
   (with-open-file (stream file :direction :output :if-exists :supersede)
     (let ((*print-pretty* nil)
           (*print-right-margin* 78))
-      (write-string "require open personoj.encodings.lhol;
-require personoj.encodings.tuple as T;
-require personoj.encodings.sum as S;
-require open personoj.encodings.logical;
-require open personoj.encodings.pvs_cert;
-require personoj.encodings.equality_tup as Eqtup;
-require open personoj.encodings.builtins personoj.encodings.coercions;" stream)
+      (write-string "require open personoj.lhol;
+require personoj.tuple as T;
+require personoj.sum as S;
+require open personoj.logical;
+require open personoj.pvs_cert;
+require personoj.equality_tup as Eqtup;
+require open personoj.builtins personoj.coercions;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
 
