@@ -41,12 +41,12 @@ function_inverse
 -function_inverse_alt
 function_image
 function_props
--function_props_alt # Disabled because of overloading
+-function_props_alt # Only overloading
 function_props2
-relation_defs
-relation_props
-relation_props2
-relation_converse_props
+-relation_defs # Non trivial overloading
+-relation_props # Depends on relation_defs
+-relation_props2 # Depends on relation_defs
+-relation_converse_props # Depends on relation_defs
 indexed_sets
 operator_defs
 numbers

@@ -27,7 +27,9 @@ jobs:
         ./configure
         export EMACS="$(command -v emacs)"
         export SBCLISP_HOME="${HOME}/sbcl"
-        patch lib/prelude.pvs translations/no_overloading.patch
+        for p in $(ls translations/prelude_patches/ | sort); do
+            patch lib/prelude.pvs "${p}"
+        done
         make >output 2>&1
 
     - name: lambdapi install
