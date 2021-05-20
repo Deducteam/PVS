@@ -86,14 +86,6 @@ require open personoj.builtins personoj.coercions;" stream)
 (defparameter *signature* nil
   "Symbols defined in the theory.")
 
-(declaim (ftype (function (list list) list) pairlis*))
-(defun pairlis* (l1 l2)
-  "Like `pairlis' but accepts L1 and L2 with different lengths, and stop as soon
-as a list is exhausted."
-  (loop for e1 in l1
-        for e2 in l2
-        collect (cons e1 e2)))
-
 ;;; Contexts
 ;;;
 ;;; Contexts are  global variables that are  filled during the export.  They are
@@ -309,15 +301,16 @@ creating a fresh variable that stand for a tuple."
 
 ;;; Specialised printing functions
 
-(declaim (ftype (function (stream symbol * *) null) pp-sym))
+(declaim (ftype (function (stream symbol * *) *) pp-sym))
 (defun pp-sym (stream sym &optional colon-p at-sign-p)
   "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
 necessary."
   (flet ((sane-charp (c)
-           (or (alphanumericp c) (char= #\_ c))))
+           (not (member c (list #\Newline #\Space #\Rubout #\Tab #\: #\, #\;
+                                #\` #\( #\) #\{ #\} #\[ #\])))))
     (let ((dk-sym (assoc sym *dk-sym-map*)))
-      (cond (dk-sym (format stream "~a" (cdr dk-sym)))
-            ((every #'sane-charp (string sym)) (format stream "~a" sym))
+      (cond (dk-sym (princ (cdr dk-sym) stream))
+            ((every #'sane-charp (string sym)) (princ sym stream))
             (t (format stream "{|~a|}" sym))))))
 
 (defun pp-type (stream tex &optional wrap at-sign-p)
@@ -621,15 +614,12 @@ is returned. ACC contains all symbols before E (in reverse order)."
       (let ((defn (univ-closure definition))
             (axiomp (member spelling '(AXIOM POSTULATE))))
         (unless axiomp (write-string "opaque " stream))
-        (write-string "symbol" stream)
-        (format stream " ~/pvs:pp-sym/ : " id)
+        (format stream "symbol ~/pvs:pp-sym/ : " id)
         (pprint-thy-formals defn 'prop stream t)
-        (write-char #\Space stream)
         (unless axiomp
           ;; TODO: export proof
-          (write-string "≔ " stream))
-        (write-string "begin admitted" stream)
-        (write-char #\; stream)
+          (write-string " ≔" stream))
+        (write-string " begin admitted;" stream)
         (setf *signature* (cons id *signature*))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
@@ -766,19 +756,6 @@ definitions are expanded, and the translation becomes too large."
       (format stream "~:/pvs:pp-dk/ " supertype)
       (pp-dk stream predicate t at-sign-p))))
 
-(defmethod pp-dk (stream (te set-expr) &optional colon-p at-sign-p)
-  "{n: nat | p(x)}, but an expression, it's only syntactic sugar for LAMBDA (n:
-nat): p(x)"
-  (dklog:log-type "set-expr")
-  (with-slots (expression bindings) te
-    ;; `binding' should contain one binding
-    (assert (consp bindings) (bindings) "Bindings of set-expr ~S is empty" te)
-    (with-slots (id) (car bindings)
-      ;; NOTE: the binding is untyped, can we merge with `lambda-expr'?
-      (with-parens (stream colon-p)
-        (format stream "λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/"
-                id expression)))))
-
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
 type."
@@ -887,6 +864,19 @@ to its first element."
        (let ((*packed-tuples* (append projspecs *packed-tuples*)))
          (pprint-abstraction expression bindings stream :wrap colon-p))))))
 
+(defmethod pp-dk (stream (te set-expr) &optional colon-p at-sign-p)
+  "{n: nat | p(x)}, but an expression, it's only syntactic sugar for LAMBDA (n:
+nat): p(x)"
+  (dklog:log-type "set-expr")
+  (with-slots (expression bindings) te
+    ;; `binding' should contain one binding
+    (assert (consp bindings) (bindings) "Bindings of set-expr ~S is empty" te)
+    (with-slots (id) (car bindings)
+      ;; NOTE: the binding is untyped, can we merge with `lambda-expr'?
+      (with-parens (stream colon-p)
+        (format stream "λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/"
+                id expression)))))
+
 (defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
   (pp-quantifier stream ex colon-p at-sign-p "∃"))
 
@@ -947,9 +937,6 @@ translation to scale up, because expressions become too verbose."
 ~:/pvs:pp-dk/ ~:/pvs:pp-dk/" (type hd) (type argr) hd argr))))
         (t (error "Tuple ~a have too few elements." ex))))))
 
-;; REVIEW in all logical connectors, the generated variables should be added to
-;; a context to be available to type expressions.
-
 (defmethod pp-dk (stream (ex branch) &optional colon-p at-sign-p)
   "IF(a,b,c)"
   (dklog:log-expr "branch")
@@ -959,7 +946,7 @@ translation to scale up, because expressions become too verbose."
       (format stream "(λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
               (fresh-var) *print-domains* prop then)
       (write-char #\Space stream)
-      (format stream "(λ ~a~:[~*~;: Prf (not ~:/pvs:pp-dk/)~], ~/pvs:pp-dk/)"
+      (format stream "(λ ~a~:[~*~;: Prf (¬ ~:/pvs:pp-dk/)~], ~/pvs:pp-dk/)"
               (fresh-var) *print-domains* prop else))))
 
 ;;; REVIEW: factorise disequation and equation
@@ -1004,7 +991,7 @@ translation to scale up, because expressions become too verbose."
     (with-binapp-args (argl argr ex)
       (format
        stream
-       "and ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
+       "~:/pvs:pp-dk/ ∧ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~], ~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex disjunction) &optional colon-p at-sign-p)
@@ -1014,7 +1001,7 @@ translation to scale up, because expressions become too verbose."
     (with-binapp-args (argl argr ex)
       (format
        stream
-       "or ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf (not ~:/pvs:pp-dk/)~],~/pvs:pp-dk/)"
+       "~:/pvs:pp-dk/ ∨ (λ ~a~:[~*~;: Prf (¬ ~:/pvs:pp-dk/)~],~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex implication) &optional colon-p at-sign-p)
@@ -1024,7 +1011,7 @@ translation to scale up, because expressions become too verbose."
     (with-binapp-args (argl argr ex)
       (format
        stream
-       "imp ~:/pvs:pp-dk/ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
+       "~:/pvs:pp-dk/ ⇒ (λ ~a~:[~*~;: Prf ~:/pvs:pp-dk/~],~/pvs:pp-dk/)"
        argl (fresh-var) *print-domains* argl argr))))
 
 (defmethod pp-dk (stream (ex iff) &optional colon-p at-sign-p)
@@ -1037,7 +1024,6 @@ translation to scale up, because expressions become too verbose."
   "NOT(A), there is also a `unary-negation' that represents NOT A."
   (dklog:log-expr "negation")
   (with-parens (stream colon-p)
-    ;; NOTE we might be able to remove parens (see with LP precedence)
     (format stream "¬ ~:/pvs:pp-dk/" (argument ex))))
 
 (defmethod pp-dk (stream (ex number-expr) &optional colon-p at-sign-p)
