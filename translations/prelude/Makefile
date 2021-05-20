@@ -4,7 +4,11 @@ LPC    = lambdapi check
 THEORIES != grep -v -E '^-|\#' theories
 PVSPATH  != realpath ../..
 
-all: ${THEORIES:C/$/.lpo/}
+all: dummy ${THEORIES:C/$/.lpo/}
+
+.PHONY: dummy
+dummy:
+	./mk_dummy.sh
 
 translate: ${THEORIES:C/$/.lp/}
 
