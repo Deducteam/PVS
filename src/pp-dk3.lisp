@@ -69,7 +69,7 @@ at the beginning of line and terminating line."
           (*print-right-margin* 78))
       (write-string "require open personoj.lhol personoj.tuple personoj.sum
 personoj.logical personoj.pvs_cert personoj.eqtup;
-require open personoj.builtins personoj.coercions;" stream)
+require open personoj.nat personoj.coercions;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
 

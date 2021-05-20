@@ -12,10 +12,12 @@ dummy:
 
 translate: ${THEORIES:C/$/.lp/}
 
+# For each theory, translate it and apply a patch if it exists
 .for th in ${THEORIES}
 ${th}.lp:
 	PVSPATH=${PVSPATH} ${PVS2DK} -f ${PVSPATH}/lib/prelude.pvs -t ${.TARGET:R} \
 -o ${PVSPATH}/translations/prelude/${.TARGET} > /dev/null
+	-[ -r "${.TARGET}.patch" ] && patch < "${.TARGET}.patch"
 .endfor
 
 .include "../lambdapi.mk"
