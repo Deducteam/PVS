@@ -416,28 +416,6 @@ stream STREAM."
     (write-char #\. stream))
   (princ mod stream))
 
-(declaim (ftype (function (symbol integer integer stream) null)
-                pprint-proj-spec))
-(defun pprint-proj-spec (var index len stream)
-  "Print the INDEXth projection of VAR being a tuple of length LEN on stream
-STREAM. `pprint-proj-spec v 3' prints ``σsnd (σsnd (σsnd (σfst v)))''."
-  (labels ((projs-of-ind (ind len)
-             "Transform a projection in a list into a succession of `fst' and
-`snd' projections."
-             (declare (type integer ind))
-             (declare (type integer len))
-             (let ((snd-projs (make-list ind :initial-element "cdr")))
-               (if (= ind (- len 1)) snd-projs (cons "car" snd-projs))))
-           (pprint-projs (ps)
-             (declare (type (polylist string) ps))
-             (if (null ps)
-                 (pp-sym stream var)
-                 (with-parens (stream t)
-                   (write-string (car ps) stream)
-                   (write-char #\space stream)
-                   (pprint-projs (cdr ps))))))
-    (pprint-projs (projs-of-ind index len))))
-
 (declaim (ftype (function (stream obj * *) *) pp-impl))
 (defun pp-impl (stream obj &optional _colon-p at-sign-p)
   "Print object OBJ to stream STREAM if `*print-implicits*' is true."
@@ -821,7 +799,8 @@ name resolution"
       ;; to successsion of projections
       ((assoc id *packed-tuples*)
        (destructuring-bind (v n m . w) (assoc id *packed-tuples*)
-         (pprint-proj-spec w n m stream)))
+         (with-parens (stream colon-p)
+           (format stream "proj ~d ~d ~/pvs:pp-sym/" n (- m 1) w))))
       ((assoc id *ctx*) (pp-sym stream id))
       ((member id *signature*)
        (with-parens (stream (consp (thy:bind-decl-of-thy)))
@@ -909,13 +888,15 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
                     (mapcar #'tup-if-needed args)))))))
 
 (defmethod pp-dk (stream (ex projection-application)
-                  &optional _colon-p _at-sign-p)
+                  &optional colon-p _at-sign-p)
   "For projections of the form t`2."
   (dklog:log-ctxts "projection-application" ex)
   (with-slots (id index argument) ex
     (let ((len (length (types (type argument))))
           (ident (id argument)))
-      (pprint-proj-spec ident index len stream))))
+      (with-parens (stream colon-p)
+        ;; TODO print types if *print-implicits* is true
+        (format stream "proj ~d ~d ~/pvs:pp-sym/" index len ident)))))
 
 (defmethod pp-dk (stream (ex tuple-expr) &optional colon-p at-sign-p)
   "Prints tuples ``(e1, e2, e3)'' as ``(σcons e1 (σcons e2 e3))''. Note that we
