@@ -358,23 +358,6 @@ IMPL is provided, then the first IMPL bindings are made implicit."
           (let ((*ctx* (extend-context hd *ctx*)))
             (pprint-abstraction ex tl stream :impl (- impl 1)))))))
 
-(declaim (ftype (function (stream (or forall-expr exists-expr) * * string) null)
-                pp-quantifier))
-(defun pp-quantifier (stream expr &optional colon-p at-sign-p quant)
-  "Print binding expression EXPR to stream STREAM with QUANT as binder."
-  (with-slots (bindings expression) expr
-    (if (null bindings)
-        (pp-dk stream expression colon-p at-sign-p)
-        (let ((newex (copy expr))
-              (bd (car bindings)))
-          (setf (slot-value newex 'bindings) (cdr bindings))
-          (with-parens (stream colon-p)
-            (write-string quant stream)
-            ;; Print domain
-            (format stream " {~:/pvs:pp-dk/} " (type-of-expr bd))
-            (with-parens (stream t)
-              (pprint-abstraction newex (list bd) stream)))))))
-
 (declaim (ftype (function (type-expr symbol list stream *) null)
                 pprint-product))
 (defun pprint-product (tex kind ctx stream &key wrap (impl 0))
@@ -587,7 +570,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
                                #'(lambda (id)
                                    (ctxe->bind-decl (assoc id *ctx*)))
                                free-ids)))
-               (make!-forall-expr bindings ex))))
+               ;; Here we may build a formula of the form FORALL (x,y,..):
+               ;; FORALL (z,...):..., but it shouldn't be a problem.
+               (if (null bindings) ex (make!-forall-expr bindings ex)))))
       (declaim (ftype (function (expr) forall-expr) univ-closure))
       (let ((defn (univ-closure definition))
             (axiomp (member spelling '(AXIOM POSTULATE))))
@@ -856,11 +841,21 @@ nat): p(x)"
         (format stream "λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/"
                 id expression)))))
 
-(defmethod pp-dk (stream (ex exists-expr) &optional colon-p at-sign-p)
-  (pp-quantifier stream ex colon-p at-sign-p "∃"))
-
-(defmethod pp-dk (stream (ex forall-expr) &optional colon-p at-sign-p)
-  (pp-quantifier stream ex colon-p at-sign-p "∀"))
+(defun pp-dk (stream (ex quant-expr) &optional colon-p _at-sign-p)
+  (dklog:log-expr "quantified expression ~S" ex)
+  (with-parens (stream wrap)
+    (write-char (cond ((forall-expr? ex) #\∀) ((exists-expr? ex) #\∃)) stream)
+    (write-char #\Space stream)
+    (with-slots (bindings expression) ex
+      (destructuring-bind (hd &rest tl) bindings
+        (pp-impl stream (type-of-expr hd))
+        (let ((subex
+                (cond
+                  ((null tl) expression) ; No more quantification needed
+                  ((forall-expr? ex) (make!-forall-expr tl expression))
+                  ((exists-expr? ex) (make!-exists-expr tl expression))
+                  (otherwise (error "Invalid expression ~S" ex)))))
+          (pprint-abstraction subex (list hd) stream :wrap t))))))
 
 (defmethod pp-dk (stream (ex application) &optional colon-p _at-sign-p)
   "Print application EX. The expression EX ``f(e1,e2)(g1,g2)'' will be printed
@@ -899,9 +894,8 @@ as ``f (σcons e1 e2) (σcons g1 g2)''."
         (format stream "proj ~d ~d ~/pvs:pp-sym/" index len ident)))))
 
 (defmethod pp-dk (stream (ex tuple-expr) &optional colon-p at-sign-p)
-  "Prints tuples ``(e1, e2, e3)'' as ``(σcons e1 (σcons e2 e3))''. Note that we
-use implicit arguments for σcons. Making arguments explicit prevents the
-translation to scale up, because expressions become too verbose."
+  "Prints tuples ``(e1, e2, e3)'' as ``(cons e1 (cons e2 e3))''. Note that we
+use implicit arguments for ``cons''."
   (dklog:log-expr "tuple-expr")
   (with-slots (exprs) ex
     ;; Tuple types have at least 2 elements (PVS invariant)
