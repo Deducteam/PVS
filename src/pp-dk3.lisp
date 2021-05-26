@@ -156,15 +156,6 @@ declarations for types concatenated with binding declarations for values."
 (u . u_pred) is added to this context. When u is required, it will be printed as
 psub u_pred.")
 
-(declaim (ftype (function ((polylist bind-decl)) context) ctx-of-bindings))
-(defun ctx-of-bindings (bindings)
-  "Transforms bindings BINDINGS into a context."
-  (flet ((f (bd)
-           (cons (id bd) (if (declared-type bd)
-                             (declared-type bd)
-                             (type bd)))))
-    (mapcar #'f bindings)))
-
 (declaim (ftype (function (cons symbol type-expr) bind-decl) ctxe->bind-decl))
 (defun ctxe->bind-decl (e)
   "Convert element E of a context to a `bind-decl'."
@@ -257,14 +248,7 @@ We have ARGS of same length as VS and PS."
 `*ctx*'."
          (declare (type expr elt))
          (with-slots (id declared-type) elt
-           (if (null declared-type)
-               (let ((v-ty (assoc id *ctx*)))
-                 (assert (not (null v-ty))
-                         (id *ctx*)
-                         "Could not find variable ~S in context ~S."
-                         id *ctx*)
-                 (cdr v-ty))
-               declared-type)))
+           (if declared-type declared-type (cdr (assoc id *ctx*)))))
        (pack-type (l)
          "Make a `bind-decl' out of L, either by taking the `car' or
 creating a fresh variable that stand for a tuple."
@@ -715,7 +699,7 @@ definitions are expanded, and the translation becomes too large."
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
       (write-string "@psub " stream)
-      (assert (not (null supertype)) (supertype) "Supertype of ~S is nil" te)
+      (assert supertype)
       (format stream "~:/pvs:pp-dk/ " supertype)
       (pp-dk stream predicate t at-sign-p))))
 
@@ -834,7 +818,7 @@ nat): p(x)"
   (dklog:log-type "set-expr")
   (with-slots (expression bindings) te
     ;; `binding' should contain one binding
-    (assert (consp bindings) (bindings) "Bindings of set-expr ~S is empty" te)
+    (assert (consp bindings))
     (with-slots (id) (car bindings)
       ;; NOTE: the binding is untyped, can we merge with `lambda-expr'?
       (with-parens (stream colon-p)
@@ -934,8 +918,7 @@ use implicit arguments for ``cons''."
            (dom (types (domain eq-ty)))
            (tyl (car dom))
            (tyr (cadr dom)))
-      (assert (equal tyl tyr) (tyl tyr)
-              "Equality types ~S and ~S are not equal." tyl tyr)
+      (assert (equal tyl tyr))
       (with-binapp-args (argl argr ex)
         (format stream
                 "@neq ~:/pvs:pp-dk/ ~
@@ -950,8 +933,7 @@ use implicit arguments for ``cons''."
            (dom (types (domain eq-ty)))
            (tyl (car dom))
            (tyr (cadr dom)))
-      (assert (equal tyl tyr) (tyl tyr)
-              "Equality types ~S and ~S are not equal." tyl tyr)
+      (assert (equal tyl tyr))
       (with-binapp-args (argl argr ex)
         (format
          stream
