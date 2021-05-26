@@ -841,7 +841,7 @@ nat): p(x)"
         (format stream "λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/"
                 id expression)))))
 
-(defmethod pp-dk (stream (ex quant-expr) &optional colon-p _at-sign-p)
+(defmethod pp-dk (stream (ex quant-expr) &optional wrap _at-sign-p)
   (dklog:log-expr "quantified expression ~S" ex)
   (with-parens (stream wrap)
     (write-char (cond ((forall-expr? ex) #\∀) ((exists-expr? ex) #\∃)) stream)
