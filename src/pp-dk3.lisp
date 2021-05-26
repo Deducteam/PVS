@@ -161,13 +161,27 @@ psub u_pred.")
   "Convert element E of a context to a `bind-decl'."
   (make!-bind-decl (car e) (cdr e)))
 
+(defstruct tuple-element
+  "A place designator in a tuple. PVS frequently performs pattern matching on
+tuples, such as f(x,y,z) = x + y + z is in fact f e = car e + cadr e + caddr e.
+A `tuple-element' links pattern matched variables (the x, y and z), to their
+original tuple. It's made of the identifier of the tuple, the index of the
+variable inside the tuple and the length of this tuple."
+  tupelt-id
+  tupelt-index
+  tupelt-length)
+(defun mk-tuple-element (id ind len)
+  "Create a tuple element at index IND of tuple ID of length LEN (with
+positional argument)."
+  (assert (<= ind len))
+  (make-tuple-element :tupelt-id id :tupelt-index ind :tupelt-length len))
+
 ;;; A bit like a context but not truly a context
-(declaim (type (polylist (cons symbol (cons integer (cons integer symbol))))
-               *packed-tuples*))
+(declaim (type (polylist (cons symbol tuple-element)) *packed-tuples*))
 (defparameter *packed-tuples* nil
-  "A mapping (v . (n . (m . s))) of this list means that variable ``v'' is the
-``n''th element of tuple ``s'' of length ``m''. It is filled by `pack-arg-tuple'
-(using lexical scoping).")
+  "A mapping (v . te) of this list means that variable V is encoded as the tuple
+element TE. This variable is filled by `pack-arg-tuple' (using lexical
+scoping).")
 
 ;;; Misc functions
 
@@ -217,30 +231,22 @@ a function name from where the debug is called)."
 
 (in-package :pvs)
 
-(declaim (ftype
-          (function (list
-                     (polylist bind-decl)
-                     (polylist (cons symbol
-                                     (cons integer
-                                           (cons integer symbol)))))
-                    (cons (polylist bind-decl)
-                          (polylist (cons symbol
-                                          (cons integer
-                                                (cons integer symbol))))))
-          pack-arg-tuple))
+(declaim
+ (ftype
+  (function (list * *) (cons (polylist bind-decl) (polylist tuple-element)))
+  pack-arg-tuple))
 (defun pack-arg-tuple (args &key vars projspec)
   "Transform the list of list of formals in ARGS into a pair (vs . ps)
 where VS is a list of binding declarations, and PS is a list of projection
 specifications. For each element E of ARGS, if its length is one, then it is a
-variable and a bind decl is made out of it and added to VS. Otherwise, if its
-length is more than one, it represents a tuple of argument. In that case, a
-fresh variable is created for the binding declaration, and its type is the list
-of types of the elements of E. The second element is a list of projection
-specifications. For each element E of ARGS, if its length is one, its projection
-specification is `nil'. Otherwise, it is a list (x . (n . (m . v))) where X
-is the identifier of the formal (that is an element of a tuple), N is its
-position in the tuple, M is the length of the tuple and V is the name of the
-fresh variable created for this tuple.
+variable and a `bind-decl' is made out of it and added to VS. Otherwise, the
+list stands for a (PVS) tuple. In that case, a fresh variable is created for the
+binding declaration, and its type is the tuple type made of the list of types of
+the elements of E.
+The second element is a list of projection specifications. For each element E of
+ARGS, if its length is one, its projection specification is `nil'. Otherwise, it
+is a pair (x . te) where X is the identifier of the formal (that is
+an element of a tuple) and TE a `tuple-element'.
 We have ARGS of same length as VS and PS."
   (labels
       ((type-with-ctx (elt)
@@ -267,7 +273,9 @@ creating a fresh variable that stand for a tuple."
            (unless (= 1 len)
              (loop for e in l
                    for i upto (- len 1)
-                   collect (cons (id e) (cons i (cons len var))))))))
+                   collect
+                   (let ((te (mk-tuple-element var i len)))
+                     (cons (id e) te)))))))
     (if (null args) (cons (reverse vars) (reverse projspec))
         (destructuring-bind (hd &rest tl) args
           (declare (type list hd))
@@ -767,9 +775,11 @@ name resolution"
       ;; Member of an unpacked tuple: as it has been repacked, we transform this
       ;; to successsion of projections
       ((assoc id *packed-tuples*)
-       (destructuring-bind (v n m . w) (assoc id *packed-tuples*)
+       (with-slots (tupelt-id tupelt-index tupelt-length)
+           (cdr (assoc id *packed-tuples*))
          (with-parens (stream colon-p)
-           (format stream "proj ~d ~d ~/pvs:pp-sym/" n (- m 1) w))))
+           (format stream "proj ~d ~d ~/pvs:pp-sym/"
+                   tupelt-index (- tupelt-length 1) tupelt-id))))
       ((assoc id *ctx*) (pp-sym stream id))
       ((member id *signature*)
        (with-parens (stream (consp (thy:bind-decl-of-thy)))
