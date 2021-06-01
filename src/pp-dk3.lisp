@@ -766,47 +766,59 @@ STREAM."))
 
 ;;; Expressions
 
-(defmethod pp-dk (stream (ex name) &optional colon-p at-sign-p)
+(defun pprint-name (id ty stream &key mod-id actuals wrap)
+  "Print identifier ID of module MOD-ID to stream STREAM with ACTUALS applied.
+If WRAP is true, then the application of ID to ACTUALS is wrapped between
+parentheses. The type TY of the symbol represented by ID may be used to resolve
+overloading."
+  (cond
+    ;; Member of an unpacked tuple: as it has been repacked, we transform this
+    ;; to successsion of projections
+    ((assoc id *packed-tuples*)
+     (with-slots (tupelt-id tupelt-index tupelt-length)
+         (cdr (assoc id *packed-tuples*))
+       (with-parens (stream wrap)
+         (format stream "proj ~d ~d ~/pvs:pp-sym/"
+                 tupelt-index (- tupelt-length 1) tupelt-id))))
+    ((assoc id *ctx*) (pp-sym stream id))
+    ((member id *signature*)
+     (with-parens (stream (consp (thy:bind-decl-of-thy)))
+       (pp-sym stream id)
+       (when (thy:bind-decl-of-thy)
+         ;; Apply theory arguments (as implicit args) to symbols of signature
+         (format stream "~{ {~/pvs:pp-dk/}~}"
+                 ;; Print arguments through ‘pp-dk’ because they might be in
+                 ;; ‘ctx-local’
+                 (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
+                   (mapcar #'(lambda (st) (mk-name-expr (car st)))
+                           (thy:as-ctx)))))))
+    ;; The symbol is a type declared as TYPE FROM in theory parameters,
+    ;; we print the predicate associated
+    ((assoc id *ctx-thy-subtypes*)
+     (format stream "~:/pvs:pp-sym/"
+             (cdr (assoc id *ctx-thy-subtypes*))))
+    ;; Symbol of the encoding
+    ((assoc id *dk-sym-map*) (pp-sym stream id))
+    ;; Otherwise, it’s a symbol from an imported theory
+    (t (with-parens (stream (consp actuals))
+         (when mod-id
+           ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
+           ;; require-open’d
+           (pp-sym stream mod-id)
+           (write-char #\. stream))
+         (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))))
+
+(defmethod pp-dk (stream (ex name-expr) &optional colon-p _at-sign-p)
   "Print name NAME applying theory formal parameters if needed. Takes care of
 name resolution"
-  (dklog:log-expr "name")
+  (dklog:log-expr "Name ~S" (id ex))
+  (with-slots (id type mod-id actuals) ex
+    (pprint-name id type stream :mod-id mod-id :actuals actuals :wrap colon-p)))
+
+(defmethod pp-dk (stream (ex type-name) &optional colon-p _at-sign-p)
+  (dklog:log-expr "Type name ~S" (id ex))
   (with-slots (id mod-id actuals) ex
-    (cond
-      ;; Member of an unpacked tuple: as it has been repacked, we transform this
-      ;; to successsion of projections
-      ((assoc id *packed-tuples*)
-       (with-slots (tupelt-id tupelt-index tupelt-length)
-           (cdr (assoc id *packed-tuples*))
-         (with-parens (stream colon-p)
-           (format stream "proj ~d ~d ~/pvs:pp-sym/"
-                   tupelt-index (- tupelt-length 1) tupelt-id))))
-      ((assoc id *ctx*) (pp-sym stream id))
-      ((member id *signature*)
-       (with-parens (stream (consp (thy:bind-decl-of-thy)))
-         (pp-sym stream id)
-         (unless (null (thy:bind-decl-of-thy))
-           ;; Apply theory arguments (as implicit args) to symbols of signature
-           (format stream "~{ {~/pvs:pp-dk/}~}"
-                   ;; Print arguments through ‘pp-dk’ because they might be in
-                   ;; ‘ctx-local’
-                   (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
-                     (mapcar #'(lambda (st) (mk-name-expr (car st)))
-                             (thy:as-ctx)))))))
-      ;; The symbol is a type declared as TYPE FROM in theory parameters,
-      ;; we print the predicate associated
-      ((assoc id *ctx-thy-subtypes*)
-       (format stream "~:/pvs:pp-sym/"
-               (cdr (assoc id *ctx-thy-subtypes*))))
-      ;; Symbol of the encoding
-      ((assoc id *dk-sym-map*) (pp-sym stream id))
-      ;; Otherwise, it’s a symbol from an imported theory
-      (t (with-parens (stream (consp actuals))
-           (unless (null mod-id)
-             ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
-             ;; require-open’d
-             (pp-sym stream mod-id)
-             (write-char #\. stream))
-           (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals))))))
+    (pprint-name id nil stream :mod-id mod-id :actuals actuals :wrap colon-p)))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t. The expression LAMBDA x, y: x binds a tuple of two elements
