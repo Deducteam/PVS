@@ -97,9 +97,16 @@ require open personoj.nat personoj.coercions;" stream)
 ;;; PVS context [x: nat, y: reals, z: nznat] is represented as ((z . nznat) (y .
 ;;; reals) (x . nat)), the most recent binding is on top (stack structure).
 
+(defun context-p (thing)
+  "A context is a list of cons cells, each cons cell contains a symbol and a
+type-expr."
+  (flet ((ctx-binding-p (b)
+           (and (consp b) (symbolp (car b)) (type-expr? (cdr b)))))
+    (and (listp thing) (every #'ctx-binding-p thing))))
+
 (deftype context ()
   "A context is an association list mapping symbols to types."
-  '(polylist (cons symbol type-expr)))
+  '(satisfies context-p))
 
 (declaim (type context *ctx*))
 (defparameter *ctx* nil
