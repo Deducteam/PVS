@@ -99,7 +99,7 @@ more_map_props
 -filters # Recursive functions
 -list2finseq # Depends on list
 -list2set # Recursive functions, depends on list
--disjointess # Recursive functions
+-disjointness # Recursive functions
 -character # Is datatype
 -strings # Depends on finite_sequence
 -lift # Is a datatype
@@ -115,12 +115,12 @@ bv_concat_def
 bv_bitwise
 -bv_nat # Recursive
 empty_bv
-bv_caret
+-bv_caret # Dependent tuple (I think)
 mod
-bv_arith_nat_defs
-bv_int_defs
+-bv_arith_nat_defs # May depend on bv_caret
+-bv_int_defs # May depend on bv_caret
 -bv_arithmetic_defs # Recursive functions
-bv_extend_defs
+-bv_extend_defs # May depend on bv_caret
 -integertypes # Fails for some reason
 -infinite_sets_def # Macros
 -finite_sets_of_sets # Recursive functions

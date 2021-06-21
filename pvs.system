@@ -308,6 +308,7 @@
 		(setq *pvs-git-describe* (pvs::pvs-git-description))
 		(pvs::write-pvs-version-file)
 		)
+  :depends-on ("esrap")
   :components
   ((:module ground-prover
     :source-pathname "src/ground-prover/"
@@ -440,7 +441,8 @@
                  (:file "tex-support")
                  (:file "pp-html")
                  (:file "pp-xml")
-                 (:file "pp-dk3")
+                 (:file "dk-sig")
+                 (:file "pp-dk3" :depends-on ("dk-sig"))
                  (:file "raw-api"))
     :depends-on (basic))
    (:module proof-checker

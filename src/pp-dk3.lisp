@@ -11,8 +11,7 @@
 (in-package :pvs)
 (export '(to-dk3))
 
-(deftype polylist (ty)
-  `(or (cons ,ty list) null))
+;;; Global parameters
 
 (defparameter *print-domains* t
   "Whether to systematically print domain of abstractions.")
@@ -26,6 +25,67 @@
     (|type| . "Set" ))
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
+
+(declaim (type type-name *type*))
+(defparameter *type* (mk-type-name '|type|)
+  "Symbol that represents TYPE in PVS which is translated as Set.")
+
+(declaim (ftype (function (type-expr) boolean) is-*type*-p))
+(defun is-*type*-p (tex)
+  "Return true if TEX is the constant TYPE"
+  (equal tex *type*))
+
+;;; Signature handling
+
+(defparameter *workdir* nil "Directory where signatures are saved and read.")
+
+(declaim (type dksig:signature *signature*))
+(defparameter *signature* (dksig:make-signature :theory 'dummy)
+  "Signature of the currently exported theory.")
+
+(defparameter *opened-signatures* nil
+  "Signatures that are opened into the current one.")
+
+(defun set-workdir (path)
+  "Set PATH as the working directory (see `*workdir*')"
+  (assert
+   (uiop:directory-pathname-p path) (path)
+   "Working directory must be a dirctory: ~a is not a directory." path)
+  (when *workdir* (error "Working directory already set: ~a" *workdir*))
+  (setf *workdir* path))
+
+(defun dump-sig ()
+  "Write the signature of the current theory to filename `theory.pvsig'."
+  (let* ((filename (string (dksig:signature-theory *signature*)))
+         (path (pvs::merge-pathnames
+                *workdir* (make-pathname :name filename :type "pvsig"))))
+    (with-open-file (s path :direction :output :if-exists :supersede
+                            :if-does-not-exist :create)
+      (dksig:dump *signature* s))))
+
+(defun open-sig (theory)
+  "Import the defined symbols of THEORY into the current one."
+  (let*
+      ((filename (string theory))
+       (path (pvs::merge-pathnames
+              *workdir* (make-pathname :name filename :type "pvsig")))
+       (content
+         (with-open-file (s path :direction :input)
+           (loop for line = (read-line s nil) while line collect line)))
+       (content (format nil "~{~a~^~%~}" content))
+       (newsig (dksig:open theory content)))
+    (setf *opened-signatures* (cons newsig *opened-signatures*))))
+
+(defmacro with-sig-update ((bind id ty sig) &body body)
+  "Bind BIND with the symbol name for ID which denotes a symbol of type TY that
+will be added into signature SIG at the end of BODY"
+  (let ((newsig (gensym)))
+    `(multiple-value-bind (,bind ,newsig) (dksig:add ,id ,ty ,sig)
+       ,@body
+       (setf sig ,newsig))))
+
+(deftype polylist (ty)
+  `(or (cons ,ty list) null))
 
 (defpackage dklog
   (:documentation "Some logging facilities.")
@@ -65,27 +125,16 @@ at the beginning of line and terminating line."
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
   (dklog:top "Translating ~s" file)
-  (with-open-file (stream file :direction :output :if-exists :supersede)
-    (let ((*print-pretty* nil)
-          (*print-right-margin* 78))
+  (let ((path (uiop:parse-unix-namestring file :want-absolute t))
+        (*print-pretty* nil)            ;slows down printing when t
+        (*print-right-margin* 78))
+    (set-workdir (uiop:pathname-directory-pathname path))
+    (with-open-file (stream file :direction :output :if-exists :supersede)
       (write-string "require open personoj.lhol personoj.tuple personoj.sum
 personoj.logical personoj.pvs_cert personoj.eqtup;
 require open personoj.nat personoj.coercions;" stream)
       (fresh-line stream)
       (pp-dk stream obj))))
-
-(declaim (type type-name *type*))
-(defparameter *type* (mk-type-name '|type|)
-  "Symbol that represents TYPE in PVS which is translated as Set.")
-
-(declaim (ftype (function (type-expr) boolean) is-*type*-p))
-(defun is-*type*-p (tex)
-  "Return true if TEX is the constant TYPE"
-  (equal tex *type*))
-
-(declaim (type (polylist symbol) *signature*))
-(defparameter *signature* nil
-  "Symbols defined in the theory.")
 
 ;;; Contexts
 ;;;
@@ -301,17 +350,32 @@ creating a fresh variable that stand for a tuple."
 
 ;;; Specialised printing functions
 
-(declaim (ftype (function (stream symbol * *) *) pp-sym))
-(defun pp-sym (stream sym &optional colon-p at-sign-p)
-  "Prints symbol SYM to stream STREAM, enclosing it in braces {||} if
-necessary."
-  (flet ((sane-charp (c)
-           (not (member c (list #\Newline #\Space #\Rubout #\Tab #\: #\, #\;
-                                #\` #\( #\) #\{ #\} #\[ #\])))))
-    (let ((dk-sym (assoc sym *dk-sym-map*)))
-      (cond (dk-sym (princ (cdr dk-sym) stream))
-            ((every #'sane-charp (string sym)) (princ sym stream))
-            (t (format stream "{|~a|}" sym))))))
+(defparameter +dk-id-forbidden+
+  (list #\Newline #\Space #\Rubout #\Tab #\: #\, #\; #\`
+        #\( #\) #\{ #\} #\[ #\])
+  "List of characters that are forbidden inside Dedukti identifiers.")
+
+(defun dk-id-char-p (thing)
+  "True if THING is a character allowed in Dedukti identifiers."
+  (and (characterp thing) (not (member thing +dk-id-forbidden+))))
+
+(declaim (ftype (function (* stream) *) pprint-ident))
+(defgeneric pprint-ident (id stream)
+  (:documentation "Transform identifier ID so that is can be read by Dedukti and
+print it to stream STREAM."))
+(defmethod pprint-ident ((id string) stream)
+  "Print identifier IDENT to STREAM so that it can be read by Lambdapi."
+  (if (every #'dk-id-char-p id)
+      (princ id stream)
+      (format stream "{|~a|}" id)))
+(defmethod pprint-ident ((id symbol) stream)
+  "Resolve symbol SYM, transform it to a Dedukti identifier and print it to
+stream STREAM."
+  (let ((dk-sym (assoc id *dk-sym-map*)))
+    (if dk-sym (princ (cdr dk-sym) stream) (pprint-ident (string id) stream))))
+(defun pp-sym (stream sym &optional _colon-p _at-sign-p)
+  "Wrapper of pprint-ident to be used in format strings."
+  (pprint-ident sym stream))
 
 (defun pp-type (stream tex &optional wrap at-sign-p)
   "Print `Set' if TEX is `*type*', or prefix TEX by `El'."
@@ -397,7 +461,8 @@ stream STREAM."
     (write-char #\space stream)
     (write-string root stream)
     (write-char #\. stream))
-  (princ mod stream))
+  (princ mod stream)
+  (open-sig mod))
 
 (declaim (ftype (function (stream obj * *) *) pp-impl))
 (defun pp-impl (stream obj &optional _colon-p at-sign-p)
@@ -495,13 +560,15 @@ is returned. ACC contains all symbols before E (in reverse order)."
              (destructuring-bind (hd &rest tl) l
                (if (equal e hd) (reverse acc) (up-to e tl (cons hd acc)))))))
     (with-slots (id theory formals-sans-usings) mod
+      (setf *signature* (dksig:make-signature :theory id))
       (format stream "// Theory ~a~%" id)
       (let ((prelude (mapcar #'id *prelude-theories*)))
         (loop for m in (up-to id prelude)
               do (pprint-reqopen m stream "pvs.prelude")
               do (write-char #\; stream)
               do (fresh-line stream)))
-      (process-formals formals-sans-usings theory))))
+      (process-formals formals-sans-usings theory)
+      (dump-sig))))
 
 (defmethod pp-dk (stream (imp importing) &optional colon-p at-sign-p)
   "Prints importing declaration IMP."
@@ -514,57 +581,59 @@ is returned. ACC contains all symbols before E (in reverse order)."
   "t: TYPE."
   (dklog:decl "type decl")
   (with-slots (id) decl
-    (format stream "constant symbol ~/pvs:pp-sym/: " id)
-    (pprint-thy-formals *type* 'kind stream t)
-    (write-char #\; stream)
-    ;; No dynamic scoping because we never remove elements from the signature
-    (setf *signature* (cons id *signature*))))
+    (with-sig-update (newid id nil *signature*)
+      (format stream "constant symbol ~/pvs:pp-sym/: " newid)
+      (pprint-thy-formals *type* 'kind stream t)
+      (write-char #\; stream))))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x, but also domain(f): TYPE = D"
   (dklog:decl "type-eq-decl")
   (with-slots (id type-expr formals) decl
-    (format stream "symbol ~/pvs:pp-sym/: " id)
-    (let* ((args (car (pack-arg-tuple formals)))
-           (ctx (mapcar #'(lambda (a) (cons (id a) (type-of-expr a))) args))
-           (ctx (append (thy:as-ctx) ctx)))
-      ;; In the case of type definitions with arguments, the type-expr is
-      ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
-      ;; of type (TYPE, KIND, KIND). So we rebuild back this type.
-      (pprint-product
-       *type* 'kind ctx stream :wrap t :impl (length (thy:as-ctx))))
-    (write-string " ≔ " stream)
-    (let* ((form-spec (pack-arg-tuple formals))
-           (*packed-tuples* (cdr form-spec))
-           (ctx (thy:bind-decl-of-thy))
-           (bindings (concatenate 'list ctx (car form-spec))))
-      (pprint-abstraction type-expr bindings stream :impl (length (thy:as-ctx))))
-    (write-char #\; stream)
-    (setf *signature* (cons id *signature*))))
+    (with-sig-update (newid id nil *signature*)
+      (format stream "symbol ~/pvs:pp-sym/: " newid)
+      (let* ((args (car (pack-arg-tuple formals)))
+             (ctx (mapcar #'(lambda (a) (cons (id a) (type-of-expr a)))
+                          args))
+             (ctx (append (thy:as-ctx) ctx)))
+        ;; In the case of type definitions with arguments, the type-expr is
+        ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
+        ;; of type (TYPE, KIND, KIND). So we rebuild back this type.
+        (pprint-product
+         *type* 'kind ctx stream :wrap t :impl (length (thy:as-ctx))))
+      (write-string " ≔ " stream)
+      (let* ((form-spec (pack-arg-tuple formals))
+             (*packed-tuples* (cdr form-spec))
+             (ctx (thy:bind-decl-of-thy))
+             (bindings (concatenate 'list ctx (car form-spec))))
+        (pprint-abstraction type-expr bindings stream :impl (length (thy:as-ctx))))
+      (write-char #\; stream))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
   (dklog:contexts "type from" decl)
   (dklog:decl "type-from-decl")
   (with-slots (id predicate supertype) decl
-    ;; PREDICATE is a type declaration
-    (format stream "symbol ~/pvs:pp-sym/: " id)
-    (pprint-thy-formals *type* 'kind stream t)
-    (write-string " ≔ " stream)
-    (pprint-abstraction
-     ;; Build properly the subtype expression for printing
-     (mk-subtype supertype (mk-name-expr (id predicate)))
-     (thy:bind-decl-of-thy)
-     stream
-     :impl (length (thy:as-ctx)))
-    (write-char #\; stream)
-    (setf *signature* (cons id *signature*))))
+    (with-sig-update (newid id nil *signature*)
+      ;; PREDICATE is a type declaration
+      (format stream "symbol ~/pvs:pp-sym/: " newid)
+      (pprint-thy-formals *type* 'kind stream t)
+      (write-string " ≔ " stream)
+      (pprint-abstraction
+       ;; Build properly the subtype expression for printing
+       (mk-subtype supertype (mk-name-expr (id predicate)))
+       (thy:bind-decl-of-thy)
+       stream
+       :impl (length (thy:as-ctx)))
+      (write-char #\; stream))))
 
 (defmethod pp-dk (stream (decl formula-decl) &optional colon-p at-sign-p)
   (dklog:decl "formula: ~S" (id decl))
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
-    (flet ((univ-closure (ex)
+    (with-sig-update (newid id nil *signature*)
+      (flet
+          ((univ-closure (ex)
              (let* ((free-ids (mapcar #'id (freevars ex)))
                     (bindings (mapcar
                                #'(lambda (id)
@@ -573,39 +642,38 @@ is returned. ACC contains all symbols before E (in reverse order)."
                ;; Here we may build a formula of the form FORALL (x,y,..):
                ;; FORALL (z,...):..., but it shouldn't be a problem.
                (if (null bindings) ex (make!-forall-expr bindings ex)))))
-      (declaim (ftype (function (expr) forall-expr) univ-closure))
-      (let ((defn (univ-closure definition))
-            (axiomp (member spelling '(AXIOM POSTULATE))))
-        (unless axiomp (write-string "opaque " stream))
-        (format stream "symbol ~/pvs:pp-sym/ : " id)
-        (pprint-thy-formals defn 'prop stream t)
-        (unless axiomp
-          ;; TODO: export proof
-          (write-string " ≔" stream))
-        (write-string " begin admitted;" stream)
-        (setf *signature* (cons id *signature*))))))
+        (declaim (ftype (function (expr) forall-expr) univ-closure))
+        (let ((defn (univ-closure definition))
+              (axiomp (member spelling '(AXIOM POSTULATE))))
+          (unless axiomp (write-string "opaque " stream))
+          (format stream "symbol ~/pvs:pp-sym/ : " newid)
+          (pprint-thy-formals defn 'prop stream t)
+          (unless axiomp
+            ;; TODO: export proof
+            (write-string " ≔" stream))
+          (write-string " begin admitted;" stream))))))
 
 (defmethod pp-dk (stream (decl const-decl) &optional colon-p at-sign-p)
   (dklog:decl "const: ~S" (id decl))
   (dklog:contexts "const-decl")
   (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
-    (if definition
-        (let* ((form-proj (pack-arg-tuple formals))
-               (*packed-tuples* (cdr form-proj))
-               (ctx-thy (thy:bind-decl-of-thy))
-               (form-bds (car form-proj))
-               (bindings (concatenate 'list ctx-thy form-bds)))
-          (format stream "symbol ~/pvs:pp-sym/: " id)
-          (pprint-thy-formals type 'set stream t)
-          (write-string " ≔ " stream)
-          (pprint-abstraction definition bindings stream
-                              :impl (length (thy:as-ctx))))
-        (progn
-          (format stream "symbol ~/pvs:pp-sym/: " id)
-          (pprint-thy-formals type 'set stream t)))
-    (write-string " begin admitted;" stream)
-    (setf *signature* (cons id *signature*))))
+    (with-sig-update (newid id type *signature*)
+      (if definition
+          (let* ((form-proj (pack-arg-tuple formals))
+                 (*packed-tuples* (cdr form-proj))
+                 (ctx-thy (thy:bind-decl-of-thy))
+                 (form-bds (car form-proj))
+                 (bindings (concatenate 'list ctx-thy form-bds)))
+            (format stream "symbol ~/pvs:pp-sym/: " newid)
+            (pprint-thy-formals type 'set stream t)
+            (write-string " ≔ " stream)
+            (pprint-abstraction definition bindings stream
+                                :impl (length (thy:as-ctx))))
+          (progn
+            (format stream "symbol ~/pvs:pp-sym/: " newid)
+            (pprint-thy-formals type 'set stream t)))
+      (write-string " begin admitted;" stream))))
 
 (defmethod pp-dk (stream (decl macro-decl) &optional _colon-p _at-sign-p)
   "Ignore macro definitions, they are expanded anyway."
@@ -617,21 +685,21 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:decl "inductive: ~S" (id decl))
   (with-slots (id type definition formals) decl
     (format stream "// Inductive definition ~a~%" id)
-    (let* ((form-proj (pack-arg-tuple formals))
-           (*packed-tuples* (cdr form-proj))
-           (ctx-thy (thy:bind-decl-of-thy))
-           (form-bds (car form-proj))
-           (bindings (concatenate 'list ctx-thy form-bds)))
-      (format stream "symbol ~/pvs:pp-sym/:" id)
-      (pprint-thy-formals type 'set stream t)
-      ;; TODO inductive definitions are not handled yet, they are axiomatised
-      (write-string "/*" stream)        ;Comment definition
-      (write-string " ≔ " stream)
-      (pprint-abstraction definition bindings stream
-                          :impl (length (thy:as-ctx)))
-      (write-string "*/" stream)        ;End of definition comment
-      (write-string " begin admitted;" stream)
-      (setf *signature* (cons id *signature*)))))
+    (with-sig-update (newid id type *signature*)
+      (let* ((form-proj (pack-arg-tuple formals))
+             (*packed-tuples* (cdr form-proj))
+             (ctx-thy (thy:bind-decl-of-thy))
+             (form-bds (car form-proj))
+             (bindings (concatenate 'list ctx-thy form-bds)))
+        (format stream "symbol ~/pvs:pp-sym/:" newid)
+        (pprint-thy-formals type 'set stream t)
+        ;; TODO inductive definitions are not handled yet, they are axiomatised
+        (write-string "/*" stream)       ;Comment definition
+        (write-string " ≔ " stream)
+        (pprint-abstraction definition bindings stream
+                            :impl (length (thy:as-ctx)))
+        (write-string "*/" stream)       ;End of definition comment
+        (write-string " begin admitted;" stream)))))
 
 (defmethod pp-dk (stream (decl def-decl) &optional colon-p at-sign-p)
   (error "Recursive function definitions are not handled yet."))
@@ -774,6 +842,7 @@ STREAM."))
 
 ;;; Expressions
 
+(declaim (ftype (function (symbol type-expr * * *) *) pprint-name))
 (defun pprint-name (id ty stream &key mod-id actuals wrap)
   "Print identifier ID of module MOD-ID to stream STREAM with ACTUALS applied.
 If WRAP is true, then the application of ID to ACTUALS is wrapped between
@@ -789,17 +858,6 @@ overloading."
          (format stream "proj ~d ~d ~/pvs:pp-sym/"
                  tupelt-index (- tupelt-length 1) tupelt-id))))
     ((assoc id *ctx*) (pp-sym stream id))
-    ((member id *signature*)
-     (with-parens (stream (consp (thy:bind-decl-of-thy)))
-       (pp-sym stream id)
-       (when (thy:bind-decl-of-thy)
-         ;; Apply theory arguments (as implicit args) to symbols of signature
-         (format stream "~{ {~/pvs:pp-dk/}~}"
-                 ;; Print arguments through ‘pp-dk’ because they might be in
-                 ;; ‘ctx-local’
-                 (flet ((cdr-*type*-p (id-ty) (is-*type*-p (cdr id-ty))))
-                   (mapcar #'(lambda (st) (mk-name-expr (car st)))
-                           (thy:as-ctx)))))))
     ;; The symbol is a type declared as TYPE FROM in theory parameters,
     ;; we print the predicate associated
     ((assoc id *ctx-thy-subtypes*)
@@ -807,14 +865,28 @@ overloading."
              (cdr (assoc id *ctx-thy-subtypes*))))
     ;; Symbol of the encoding
     ((assoc id *dk-sym-map*) (pp-sym stream id))
-    ;; Otherwise, it’s a symbol from an imported theory
-    (t (with-parens (stream (consp actuals))
-         (when mod-id
-           ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
-           ;; require-open’d
-           (pp-sym stream mod-id)
-           (write-char #\. stream))
-         (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))))
+    ;; Symbol from a signature
+    (t
+     (let ((from-opened
+             (dksig:find* id ty (cons *signature* *opened-signatures*))))
+       (if from-opened
+           (with-parens (stream (consp (thy:bind-decl-of-thy)))
+             (pprint-ident from-opened stream)
+             (when (thy:bind-decl-of-thy)
+               ;; Apply theory arguments (as implicit args) to symbols of signature
+               (format
+                stream "~{ {~/pvs:pp-dk/}~}"
+                ;; Print arguments through ‘pp-dk’ because they might be in
+                ;; ‘ctx-local’
+                (mapcar #'(lambda (st) (mk-name-expr (car st))) (thy:as-ctx)))))
+           ;; Symbol from an imported theory
+           (with-parens (stream (consp actuals))
+             (when mod-id
+               ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
+               ;; require-open’d
+               (pp-sym stream mod-id)
+               (write-char #\. stream))
+             (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))))))
 
 (defmethod pp-dk (stream (ex name-expr) &optional colon-p _at-sign-p)
   "Print name NAME applying theory formal parameters if needed. Takes care of
@@ -826,7 +898,7 @@ name resolution"
 (defmethod pp-dk (stream (ex type-name) &optional colon-p _at-sign-p)
   (dklog:expr "Type name ~S" (id ex))
   (with-slots (id mod-id actuals) ex
-    (pprint-name id nil stream :mod-id mod-id :actuals actuals :wrap colon-p)))
+    (pprint-name id *type* stream :mod-id mod-id :actuals actuals :wrap colon-p)))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t. The expression LAMBDA x, y: x binds a tuple of two elements

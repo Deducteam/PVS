@@ -10,7 +10,7 @@ all: dummy ${THEORIES:C/$/.lpo/}
 dummy:
 	./mk_dummy.sh
 
-translate: ${THEORIES:C/$/.lp/}
+translate: dummy ${THEORIES:C/$/.lp/}
 
 # For each theory, translate it and apply a patch if it exists
 .for th in ${THEORIES}
