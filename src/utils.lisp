@@ -31,13 +31,31 @@
 
 ;;(proclaim '(inline resolution))
 
-(export '(argument* copy-all copy-context current-declarations-hash
+(export '(aif argument* copy-all copy-context current-declarations-hash
 	  current-theory current-theory-name current-using-hash file-older
 	  find-supertype get-theory lf make-new-context mapappend operator*
 	  prover-status put-decl pvs-current-directory resolution show assq tc-term
 	  formals pvs-git-description ref-to-id next-proof-id make-default-proof))
 
 (declaim (notinline current-theory))
+
+(defmacro aif (test-form then-form &optional else-form)
+  "Anaphoric `if' using IT as the result of the test form."
+  (let ((it (intern (symbol-name 'it)))) ;so that the macro can be exported
+    `(let ((,it ,test-form))
+       (if ,it ,then-form ,else-form))))
+
+(defmacro acond (&rest clauses)
+  "Anaphoric `cond' that bind IT as the result of the test."
+  (if (null clauses)
+      nil
+      (let ((cl1 (car clauses))
+            (sym (gensym))
+            (it (intern (symbol-name 'it))))
+        `(let* ((,sym ,(car cl1)))
+           (if ,sym
+               (let ((,it ,sym)) ,@(cdr cl1))
+               (acond ,@(cdr clauses)))))))
 
 (defun flatten-list (obj)
   (cond ((null obj) obj)

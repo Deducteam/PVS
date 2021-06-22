@@ -1,7 +1,6 @@
 ;;; Export to Dedukti.
 ;;; This module provides the function ‘to-dk3’ which exports a PVS theory to a
 ;;; Dedukti3 file.
-;;; TODO module resolution and importing
 ;;; TODO recursive functions
 ;;; TODO assuming sections
 ;;; TODO dependent pairs
@@ -21,7 +20,7 @@
 
 (declaim (type (cons (cons symbol string) list) *dk-sym-map*))
 (defparameter *dk-sym-map*
-  `((|boolean| . "prop") (|bool| . "prop") (true . "true") (false . "false")
+  '((|boolean| . "prop") (|bool| . "prop") (true . "true") (false . "false")
     (|type| . "Set" ))
   "Maps PVS names to names of the encoding. It is also used to avoid prepending
 the symbols with a module id.")
@@ -166,6 +165,12 @@ declarations `var-decl' are never removed from the context.")
 (defparameter *ctx-var* nil
   "Context enriched by `var-decl' only. Not typed bound variables of LAMBDAs
 seek their type into this context only (and not previous LAMBDA bindings).")
+
+(defmacro with-extended-context ((bd ctx) &body body)
+  "Expand to BODY but extending context CTX with binding BD before"
+  `(with-slots (id declared-type) ,bd
+     (let ((,ctx (if declared-type (acons id declared-type ,ctx) ,ctx)))
+       ,@body)))
 
 (defpackage theory
   (:use :cl :pvs)
@@ -342,12 +347,6 @@ creating a fresh variable that stand for a tuple."
              tl :vars (cons bd vars)
              :projspec (concatenate 'list spec projspec)))))))
 
-(declaim (ftype (function (bind-decl list) list) extend-context))
-(defun extend-context (bd ctx)
-  "Extend context CTX with binding declaration BD (if it is typed)."
-  (with-slots (id declared-type) bd
-    (if declared-type (acons id declared-type ctx) ctx)))
-
 ;;; Specialised printing functions
 
 (defparameter +dk-id-forbidden+
@@ -393,7 +392,7 @@ true."
     (pp-sym stream id)
     (write-char #\: stream)
     (if declared-type
-        (let ((*ctx* (acons id declared-type *ctx*)))
+        (with-extended-context (bd *ctx*)
           ;; Print the body with the variable in context
           (pp-type stream declared-type))
         (let ((typ (cdr (assoc id *ctx-var*))))
@@ -419,28 +418,28 @@ IMPL is provided, then the first IMPL bindings are made implicit."
           (write-string "λ " stream)
           (pprint-bind-decl hd stream (> impl 0))
           (write-char #\, stream)
-          (let ((*ctx* (extend-context hd *ctx*)))
+          (with-extended-context (hd *ctx*)
             (pprint-abstraction ex tl stream :impl (- impl 1)))))))
 
 (declaim (ftype (function (type-expr symbol list stream *) null)
                 pprint-product))
 (defun pprint-product (tex kind ctx stream &key wrap (impl 0))
   "Print `Π x1: t1, Π x2: t2, ..., Π xn: tn, ξ (TEX)' where `(xi, ti)' are the
-components of CTX, and ξ is determined by KIND which may be 'set, 'prop or
-'kind. The first IMPL arguments are made implicit (wrapped into curly
+components of CTX, and ξ is determined by KIND which may be :set, :prop or
+:kind. The first IMPL arguments are made implicit (wrapped into curly
 brackets)."
   (if (null ctx)
       (case kind
-        ('kind (pp-dk stream tex))
-        ('set (format stream "El ~:/pvs:pp-dk/" tex))
-        ('prop (format stream "Prf ~:/pvs:pp-dk/" tex)))
+        (:kind (pp-dk stream tex))
+        (:set (format stream "El ~:/pvs:pp-dk/" tex))
+        (:prop (format stream "Prf ~:/pvs:pp-dk/" tex)))
       (destructuring-bind ((id . typ) &rest tl) ctx
         (let ((bd (mk-bind-decl id typ)))
           (write-char #\Π stream)
           (write-char #\space stream)
           (pprint-bind-decl bd stream (> impl 0))
           (write-char #\, stream)
-          (let ((*ctx* (extend-context bd *ctx*)))
+          (with-extended-context (bd *ctx*)
             (pprint-product tex kind tl stream :impl (- impl 1)))))))
 
 (declaim (ftype (function (type-expr symbol stream *) null) pprint-thy-formals))
@@ -583,7 +582,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (with-slots (id) decl
     (with-sig-update (newid id nil *signature*)
       (format stream "constant symbol ~/pvs:pp-sym/: " newid)
-      (pprint-thy-formals *type* 'kind stream t)
+      (pprint-thy-formals *type* :kind stream t)
       (write-char #\; stream))))
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
@@ -600,7 +599,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
         ;; simply `TYPE', even though it ought to be d *> TYPE with *> the arrow
         ;; of type (TYPE, KIND, KIND). So we rebuild back this type.
         (pprint-product
-         *type* 'kind ctx stream :wrap t :impl (length (thy:as-ctx))))
+         *type* :kind ctx stream :wrap t :impl (length (thy:as-ctx))))
       (write-string " ≔ " stream)
       (let* ((form-spec (pack-arg-tuple formals))
              (*packed-tuples* (cdr form-spec))
@@ -617,7 +616,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
     (with-sig-update (newid id nil *signature*)
       ;; PREDICATE is a type declaration
       (format stream "symbol ~/pvs:pp-sym/: " newid)
-      (pprint-thy-formals *type* 'kind stream t)
+      (pprint-thy-formals *type* :kind stream t)
       (write-string " ≔ " stream)
       (pprint-abstraction
        ;; Build properly the subtype expression for printing
@@ -647,7 +646,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
               (axiomp (member spelling '(AXIOM POSTULATE))))
           (unless axiomp (write-string "opaque " stream))
           (format stream "symbol ~/pvs:pp-sym/ : " newid)
-          (pprint-thy-formals defn 'prop stream t)
+          (pprint-thy-formals defn :prop stream t)
           (unless axiomp
             ;; TODO: export proof
             (write-string " ≔" stream))
@@ -666,13 +665,13 @@ is returned. ACC contains all symbols before E (in reverse order)."
                  (form-bds (car form-proj))
                  (bindings (concatenate 'list ctx-thy form-bds)))
             (format stream "symbol ~/pvs:pp-sym/: " newid)
-            (pprint-thy-formals type 'set stream t)
+            (pprint-thy-formals type :set stream t)
             (write-string " ≔ " stream)
             (pprint-abstraction definition bindings stream
                                 :impl (length (thy:as-ctx))))
           (progn
             (format stream "symbol ~/pvs:pp-sym/: " newid)
-            (pprint-thy-formals type 'set stream t)))
+            (pprint-thy-formals type :set stream t)))
       (write-string " begin admitted;" stream))))
 
 (defmethod pp-dk (stream (decl macro-decl) &optional _colon-p _at-sign-p)
@@ -692,7 +691,7 @@ is returned. ACC contains all symbols before E (in reverse order)."
              (form-bds (car form-proj))
              (bindings (concatenate 'list ctx-thy form-bds)))
         (format stream "symbol ~/pvs:pp-sym/:" newid)
-        (pprint-thy-formals type 'set stream t)
+        (pprint-thy-formals type :set stream t)
         ;; TODO inductive definitions are not handled yet, they are axiomatised
         (write-string "/*" stream)       ;Comment definition
         (write-string " ≔ " stream)
@@ -759,9 +758,9 @@ See parse.lisp:826"
   "Prints the printable type of type expr TE if it exists, or hand over to next
 method. If we do not use the PRINT-TYPE field, all predicate subtypes
 definitions are expanded, and the translation becomes too large."
-  (if (print-type te)
-      (pp-dk stream (print-type te) colon-p at-sign-p)
-      (call-next-method)))
+  (aif (print-type te)
+       (pp-dk stream it colon-p at-sign-p)
+       (call-next-method)))
 
 (defmethod pp-dk (stream (te tupletype) &optional colon-p at-sign-p)
   "[bool, bool] but also [bool, bool -> bool]"
@@ -848,12 +847,12 @@ STREAM."))
 If WRAP is true, then the application of ID to ACTUALS is wrapped between
 parentheses. The type TY of the symbol represented by ID may be used to resolve
 overloading."
-  (cond
+  (acond
     ;; Member of an unpacked tuple: as it has been repacked, we transform this
     ;; to successsion of projections
     ((assoc id *packed-tuples*)
      (with-slots (tupelt-id tupelt-index tupelt-length)
-         (cdr (assoc id *packed-tuples*))
+         (cdr it)
        (with-parens (stream wrap)
          (format stream "proj ~d ~d ~/pvs:pp-sym/"
                  tupelt-index (- tupelt-length 1) tupelt-id))))
@@ -861,32 +860,32 @@ overloading."
     ;; The symbol is a type declared as TYPE FROM in theory parameters,
     ;; we print the predicate associated
     ((assoc id *ctx-thy-subtypes*)
-     (format stream "~:/pvs:pp-sym/"
-             (cdr (assoc id *ctx-thy-subtypes*))))
+     (format stream "~:/pvs:pp-sym/" (cdr it)))
     ;; Symbol of the encoding
     ((assoc id *dk-sym-map*) (pp-sym stream id))
     ;; Symbol from a signature
+    ((dksig:find* id ty (cons *signature* *opened-signatures*))
+     (with-parens (stream (consp (thy:bind-decl-of-thy)))
+       (pprint-ident it stream)
+       (when (thy:bind-decl-of-thy)
+         ;; Apply theory arguments (as implicit args) to symbols of signature
+         (format
+          stream "~{ {~/pvs:pp-dk/}~}"
+          ;; Print arguments through ‘pp-dk’ because they might be in
+          ;; ‘ctx-local’
+          (mapcar #'(lambda (st) (mk-name-expr (car st))) (thy:as-ctx))))))
+    ;; Symbol from an imported theory
     (t
-     (let ((from-opened
-             (dksig:find* id ty (cons *signature* *opened-signatures*))))
-       (if from-opened
-           (with-parens (stream (consp (thy:bind-decl-of-thy)))
-             (pprint-ident from-opened stream)
-             (when (thy:bind-decl-of-thy)
-               ;; Apply theory arguments (as implicit args) to symbols of signature
-               (format
-                stream "~{ {~/pvs:pp-dk/}~}"
-                ;; Print arguments through ‘pp-dk’ because they might be in
-                ;; ‘ctx-local’
-                (mapcar #'(lambda (st) (mk-name-expr (car st))) (thy:as-ctx)))))
-           ;; Symbol from an imported theory
-           (with-parens (stream (consp actuals))
-             (when mod-id
-               ;; If `mod-id’ is `nil’, then symbol comes from prelude, which is
-               ;; require-open’d
-               (pp-sym stream mod-id)
-               (write-char #\. stream))
-             (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))))))
+     (with-parens (stream (consp actuals))
+       (when mod-id
+         ;; TODO fail if `mod-id' is `nil'
+         (pp-sym stream mod-id)
+         (write-char #\. stream))
+       ;; (unless mod-id
+       ;;   (error "Symbol ~a is supposed to come from an imported theory." id))
+       ;; (pp-sym stream mod-id)
+       ;; (write-char #\. stream)
+       (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))))
 
 (defmethod pp-dk (stream (ex name-expr) &optional colon-p _at-sign-p)
   "Print name NAME applying theory formal parameters if needed. Takes care of
@@ -898,7 +897,8 @@ name resolution"
 (defmethod pp-dk (stream (ex type-name) &optional colon-p _at-sign-p)
   (dklog:expr "Type name ~S" (id ex))
   (with-slots (id mod-id actuals) ex
-    (pprint-name id *type* stream :mod-id mod-id :actuals actuals :wrap colon-p)))
+    (pprint-name id *type* stream :mod-id mod-id :actuals actuals
+                                  :wrap colon-p)))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
   "LAMBDA (x: T): t. The expression LAMBDA x, y: x binds a tuple of two elements
@@ -906,7 +906,7 @@ to its first element."
   (dklog:expr "lambda-expr ~a" ex)
   (with-slots (bindings expression) ex
     (if
-     (= 1 (length bindings))
+     (and (listp bindings) (null (cdr bindings))) ;== (= 1 (length bindings))
      ;; If there is only one binding, it represents a variable
      (pprint-abstraction expression bindings stream :wrap colon-p)
      ;; Otherwise, each variable of the binding is the component of a tuple

@@ -1,19 +1,8 @@
-(defpackage dk-utils
-  (:use :cl)
-  (:export :aif))
-
-(in-package :dk-utils)
-
-(defmacro aif (test-form then-form &optional else-form)
-  "Anaphoric `if' using IT as the result of the test form."
-  (let ((it (intern (symbol-name 'it)))) ;so that the macro can be exported
-    `(let ((,it ,test-form))
-       (if ,it ,then-form ,else-form))))
-
 (defpackage dksig
   (:documentation "Signatures for the export to Dedukti. They allow to remove
 overloading from PVS' theories")
-  (:use :cl :esrap :dk-utils)
+  (:use :cl :esrap)
+  (:import-from :pvs :aif)
   (:export
    :signature :make-signature :signature-theory
    :find :find* :add
@@ -28,28 +17,19 @@ overloading from PVS' theories")
 
 (defun some-pvs-type-p (thing)
   (or (null thing) (pvs:type-expr? thing)))
-(deftype some-pvs-type ()
-  '(satisfies some-pvs-type-p))
-
-(defstruct variant
-  (type nil :type some-pvs-type) (suffix "" :type string))
-
-(declaim (ftype (function (* some-pvs-type) variants) init-variants))
-(defun init-variants (id ty)
-  "Create a new `sym-decl' for symbol of identifier ID whose type is TY."
-  (declare (ignore id))
-  (list (make-variant :type ty)))
-
-(declaim (ftype (function (some-pvs-type variants)
-                          (values string variants)) add-variant))
-(defun add-variant (ty vs)
-  "Add a variant with type TY to variants VS."
-  (let* ((suff (format nil "~36r" (length vs)))
-         (v (make-variant :type ty :suffix suff)))
-    (values suff (append vs (list v)))))
 
 (defun variants-p (thing)
   (and (listp thing) (every #'variant-p thing)))
+
+(deftype some-pvs-type ()
+  "A PVS type or `nil'."
+  '(satisfies some-pvs-type-p))
+
+(defstruct variant
+  "A variant of a symbol. It is identified by its type, and has a suffix to be
+appended to the symbol."
+  (type nil :type some-pvs-type) (suffix "" :type string))
+
 (deftype variants ()
   "A list of variants."
   '(satisfies variants-p))
@@ -60,6 +40,22 @@ symbols as they appear in PVS to a list of variants."
   theory
   (decls (make-hash-table)))
 
+(declaim (ftype (function (* some-pvs-type) variants) init-variants))
+(defun init-variants (id ty)
+  "Create a new list of variants for symbol of identifier ID whose type is TY."
+  (declare (ignore id))
+  (list (make-variant :type ty)))
+
+(declaim (ftype (function (some-pvs-type variants)
+                          (values string variants)) add-variant))
+(defun add-variant (ty vs)
+  "Add a variant with type TY to variants VS and return the new list of variants
+along with the suffix of the new variant."
+  (let* ((suff (format nil "~36r" (length vs)))
+         (v (make-variant :type ty :suffix suff)))
+    (values suff (append vs (list v)))))
+
+(declaim (ftype (function (some-pvs-type some-pvs-type) *) some-pvs-type-eq))
 (defun some-pvs-type-eq (x y)
   "PVS equality on optional terms. X and Y are equal if they are both `nil' or
 if they are `pvs::tc-eq'."
@@ -69,8 +65,9 @@ if they are `pvs::tc-eq'."
  (ftype (function (symbol some-pvs-type signature)
                   (values string signature)) add))
 (defun add (id ty sig)
-  "Add the declaration of symbol ID of type TY to the signature SIG. Destructive
-on SIG."
+  "Add the declaration of symbol ID of type TY to the signature SIG and return
+the new identifier that is to be used in place of ID and the new signature.
+Destructive on SIG."
   (let* ((sid (string id))
          (vs (gethash sid (signature-decls sig))))
     (if (null vs)
@@ -92,9 +89,10 @@ among defined symbols of signature SIG."
 
 (declaim (ftype (function (symbol some-pvs-type list) (or null string))))
 (defun find* (id ty sigs)
-  (if (null sigs) nil
-      (aif (find id ty (car sigs)) it
-           (find* id ty (cdr sigs)))))
+  "Search for symbol ID of type TY among signatures SIGS."
+  (when sigs
+    (aif (find id ty (car sigs)) it
+         (find* id ty (cdr sigs)))))
 
 (declaim (ftype (function (stream variant) *) pp-variant))
 (defun pp-variant (stream v &optional colon-p at-sign-p)
@@ -124,8 +122,8 @@ among defined symbols of signature SIG."
 
 ;;; Rules to parse saved to disk signatures
 ;;; Signatures are saved in the following format
-;;; (("s0" ($ty0,0$ . "d0,0") ($ty0,1$ . "d0,1"))
-;;;  ("s1" ($ty1,0$ . "d1,0") ($ty1.1$ . "d1.1")))
+;;; (("s0" . ($ty0,0$ . "d0,0") ($ty0,1$ . "d0,1"))
+;;;  ("s1" . ($ty1,0$ . "d1,0") ($ty1.1$ . "d1.1")))
 ;;; where s0, s1 are the symbols from PVS, tyi,j are the types of these symbols,
 ;;; there may be several types when the symbol is overloaded. Types are between
 ;;; carets to ease parsing. And di,j are the symbols used into the Dedukti
