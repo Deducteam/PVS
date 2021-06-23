@@ -841,7 +841,12 @@ STREAM."))
 
 ;;; Expressions
 
-(declaim (ftype (function (symbol type-expr * * *) *) pprint-name))
+(declaim
+ (ftype (function (symbol
+                   (or type-expr null)
+                   stream
+                   &key (mod-id *) (actuals list) (wrap boolean)) *)
+        pprint-name))
 (defun pprint-name (id ty stream &key mod-id actuals wrap)
   "Print identifier ID of module MOD-ID to stream STREAM with ACTUALS applied.
 If WRAP is true, then the application of ID to ACTUALS is wrapped between
@@ -863,8 +868,8 @@ overloading."
      (format stream "~:/pvs:pp-sym/" (cdr it)))
     ;; Symbol of the encoding
     ((assoc id *dk-sym-map*) (pp-sym stream id))
-    ;; Symbol from a signature
-    ((dksig:find* id ty (cons *signature* *opened-signatures*))
+    ;; Symbol from the current signature
+    ((dksig:find id ty *signature*)
      (with-parens (stream (consp (thy:bind-decl-of-thy)))
        (pprint-ident it stream)
        (when (thy:bind-decl-of-thy)
@@ -874,6 +879,8 @@ overloading."
           ;; Print arguments through ‘pp-dk’ because they might be in
           ;; ‘ctx-local’
           (mapcar #'(lambda (st) (mk-name-expr (car st))) (thy:as-ctx))))))
+    ;; Symbol from an opened signature
+    ((dksig:find* id ty *opened-signatures*) (pprint-ident it stream))
     ;; Symbol from an imported theory
     (t
      (with-parens (stream (consp actuals))
@@ -897,7 +904,7 @@ name resolution"
 (defmethod pp-dk (stream (ex type-name) &optional colon-p _at-sign-p)
   (dklog:expr "Type name ~S" (id ex))
   (with-slots (id mod-id actuals) ex
-    (pprint-name id *type* stream :mod-id mod-id :actuals actuals
+    (pprint-name id nil stream :mod-id mod-id :actuals actuals
                                   :wrap colon-p)))
 
 (defmethod pp-dk (stream (ex lambda-expr) &optional colon-p _at-sign-p)
