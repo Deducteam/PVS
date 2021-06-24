@@ -31,7 +31,7 @@
 
 ;;(proclaim '(inline resolution))
 
-(export '(mkstr aif acond lrec argument* copy-all copy-context
+(export '(mkstr aif acond argument* copy-all copy-context
 	  current-declarations-hash current-theory current-theory-name
 	  current-using-hash file-older find-supertype get-theory lf
 	  make-new-context mapappend operator* prover-status put-decl

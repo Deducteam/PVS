@@ -516,43 +516,34 @@ the declaration of TYPE FROM."
             (cond
               ((formal-subtype-decl? hd)
                ;; Retrieve the name of the subtype
-               (let* ((pred (predicate (type-value hd))))
-                 ;; No dynamic scoping because `*ctx-thy-subtypes*' is never
-                 ;; depleted
-                 (setf *ctx-thy-subtypes*
-                       (acons (id hd) (id pred) *ctx-thy-subtypes*))
-                 (setf *thy-bindings*
-                       (add-thy-binding (id pred) (type pred) *thy-bindings*))
+               (let ((pred (predicate (type-value hd))))
+                 ;; No dynamic scoping because `*ctx-thy-subtypes*' and
+                 ;; `*thy-bindings*' are never depleted
+                 (psetf
+                  *ctx-thy-subtypes*
+                  (acons (id hd) (id pred) *ctx-thy-subtypes*)
+                  *thy-bindings*
+                  (add-thy-binding (id pred) (type pred) *thy-bindings*))
                  (process-formals tl theory)))
               ((formal-type-decl? hd)
-               (progn
-                 (setf *thy-bindings*
-                       (add-thy-binding (id hd) *type* *thy-bindings*))
-                 (process-formals tl theory)))
+               (setf *thy-bindings*
+                     (add-thy-binding (id hd) *type* *thy-bindings*))
+               (process-formals tl theory))
               ((formal-const-decl? hd)
-               (let* (;; REVIEW adding to *ctx* might be superfluous
-                      (*ctx* (acons (id hd) (declared-type hd) *ctx*)))
+               (let (;; REVIEW adding to *ctx* might be superfluous
+                     (*ctx* (acons (id hd) (declared-type hd) *ctx*)))
                  (setf *thy-bindings*
-                  (add-thy-binding (id hd) (declared-type hd) *thy-bindings*))
-                 (process-formals tl theory)))))))
-       (up-to (e l &optional acc)
-         "Return all symbols of list L up to symbol E. If E is not in L, all L
-is returned. ACC contains all symbols before E (in reverse order)."
-         (declare (type symbol e))
-         (declare (type (polylist symbol) l))
-         (declare (type (polylist symbol) acc))
-         (if (null l)
-             (reverse acc)
-             (destructuring-bind (hd &rest tl) l
-               (if (equal e hd) (reverse acc) (up-to e tl (cons hd acc)))))))
+                       (add-thy-binding (id hd) (declared-type hd)
+                                        *thy-bindings*))
+                 (process-formals tl theory))))))))
     (with-slots (id theory formals-sans-usings) mod
       (setf *signature* (dksig:make-signature :theory id))
       (format stream "// Theory ~a~%" id)
       (let ((prelude (mapcar #'id *prelude-theories*)))
-        (loop for m in (up-to id prelude)
-              do (pprint-reqopen m stream "pvs.prelude")
-              do (write-char #\; stream)
-              do (fresh-line stream)))
+        (loop for m in (list-upto prelude id) do
+          (pprint-reqopen m stream "pvs.prelude")
+          (write-char #\; stream)
+          (fresh-line stream)))
       (process-formals formals-sans-usings theory)
       (dump-sig))))
 
@@ -613,6 +604,9 @@ is returned. ACC contains all symbols before E (in reverse order)."
   (dklog:decl "formula: ~S" (id decl))
   (with-slots (spelling id definition) decl
     (format stream "// Formula declaration: ~a~&" spelling)
+    ;; TODO the type is for now `nil', something more meaningful must be used,
+    ;; in accordance to what the type is when the name of the  formula is
+    ;; printed
     (with-sig-update (newid id nil *signature*)
       (flet
           ((univ-closure (ex)
