@@ -31,13 +31,18 @@
 
 ;;(proclaim '(inline resolution))
 
-(export '(aif argument* copy-all copy-context current-declarations-hash
-	  current-theory current-theory-name current-using-hash file-older
-	  find-supertype get-theory lf make-new-context mapappend operator*
-	  prover-status put-decl pvs-current-directory resolution show assq tc-term
-	  formals pvs-git-description ref-to-id next-proof-id make-default-proof))
+(export '(mkstr aif acond lrec argument* copy-all copy-context
+	  current-declarations-hash current-theory current-theory-name
+	  current-using-hash file-older find-supertype get-theory lf
+	  make-new-context mapappend operator* prover-status put-decl
+	  pvs-current-directory resolution show assq tc-term formals
+	  pvs-git-description ref-to-id next-proof-id make-default-proof))
 
 (declaim (notinline current-theory))
+
+(defun mkstr (&rest args)
+  (with-output-to-string (s)
+    (dolist (a args) (princ a s))))
 
 (defmacro aif (test-form then-form &optional else-form)
   "Anaphoric `if' using IT as the result of the test form."

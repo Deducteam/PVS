@@ -13,9 +13,7 @@ sbcl --load src/make-pvs-parser.lisp
 sbcl --eval "(defvar *pvs-path* \"$(pwd)\")" \
     --load src/make-pvs-methods.lisp
 mkdir -p "bin/${PLATFORM}/runtime"
-sbcl --eval '(require :sb-posix)' \
-    --eval '(require :sb-md5)' \
-    --eval '(load "pvs.system" :verbose t)' \
+sbcl --eval '(load "pvs.system" :verbose t)' \
     --eval "(unwind-protect \
     (mk:operate-on-system :pvs :compile) \
     (save-lisp-and-die \"bin/${PLATFORM}/runtime/pvs-sbclisp\" \
