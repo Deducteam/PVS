@@ -31,7 +31,7 @@
 
 ;;(proclaim '(inline resolution))
 
-(export '(mkstr aif acond argument* copy-all copy-context
+(export '(mkstr symb aif acond argument* copy-all copy-context
 	  current-declarations-hash current-theory current-theory-name
 	  current-using-hash file-older find-supertype get-theory lf
 	  make-new-context mapappend operator* prover-status put-decl
@@ -43,6 +43,9 @@
 (defun mkstr (&rest args)
   (with-output-to-string (s)
     (dolist (a args) (princ a s))))
+
+(defun symb (&rest args)
+  (values (intern (apply #'mkstr args))))
 
 (defmacro aif (test-form then-form &optional else-form)
   "Anaphoric `if' using IT as the result of the test form."

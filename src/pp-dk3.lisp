@@ -75,11 +75,11 @@ the symbols with a module id.")
        (newsig (dksig:open theory content)))
     (setf *opened-signatures* (cons newsig *opened-signatures*))))
 
-(defmacro with-sig-update ((bind id ty sig) &body body)
+(defmacro with-sig-update ((bind sym ty sig) &body body)
   "Bind BIND with the symbol name for ID which denotes a symbol of type TY that
 will be added into signature SIG at the end of BODY"
   (let ((newsig (gensym)))
-    `(multiple-value-bind (,bind ,newsig) (dksig:add ,id ,ty ,sig)
+    `(multiple-value-bind (,bind ,newsig) (dksig:add ,sym ,ty ,sig)
        ,@body
        (setf sig ,newsig))))
 
@@ -853,7 +853,9 @@ overloading."
           stream "~{ {~/pvs:pp-sym/}~}"
           (mapcar #'id (reverse *thy-bindings*))))))
     ;; Symbol from an opened signature
-    ((dksig:find id ty *opened-signatures*) (pprint-ident it stream))
+    ((dksig:find id ty *opened-signatures*)
+     (with-parens (stream (and wrap (consp actuals)))
+       (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))
     ;; Symbol from an imported theory
     (t
      (with-parens (stream (consp actuals))

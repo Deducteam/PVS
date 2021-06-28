@@ -2,7 +2,7 @@
   (:documentation "Signatures for the export to Dedukti. They allow to remove
 overloading from PVS' theories")
   (:use :cl :esrap)
-  (:import-from :pvs :aif)
+  (:import-from :pvs :aif :mkstr :symb)
   (:export
    :signature :make-signature :signature-theory
    :find :add
@@ -64,39 +64,38 @@ if they are `pvs::tc-eq'."
 ;; TODO add opened signatures to `add' to perform overloading across theories
 (declaim
  (ftype (function (symbol some-pvs-type signature)
-                  (values string signature)) add))
-(defun add (id ty sig)
-  "Add the declaration of symbol ID of type TY to the signature SIG and return
-the new identifier that is to be used in place of ID and the new signature.
+                  (values symbol signature)) add))
+(defun add (sym ty sig)
+  "Add the declaration of symbol sym of type TY to the signature SIG and return
+the new identifier that is to be used in place of SYM and the new signature.
 Destructive on SIG."
-  (let ((sid (string id))) ;for some reason it doesn't work with mkstr
-    (aif (gethash sid (signature-decls sig))
-         (multiple-value-bind (suff vs) (add-variant ty it)
-           (setf (gethash sid (signature-decls sig)) vs)
-           (values (concatenate 'string sid suff) sig))
-         (progn
-           (setf (gethash sid (signature-decls sig)) (init-variants sid ty))
-           (values sid sig)))))
+  (aif (gethash sym (signature-decls sig))
+       (multiple-value-bind (suff vs) (add-variant ty it)
+         (setf (gethash sym (signature-decls sig)) vs)
+         (values (symb sym suff) sig))
+       (progn
+         (setf (gethash sym (signature-decls sig)) (init-variants sym ty))
+         (values sym sig))))
 
 (declaim
- (ftype (function (symbol some-pvs-type signature) (or null string)) find1))
-(defun find1 (id ty sig)
-  "Get the appropriate identifier for PVS symbol identified with ID of type TY
-among defined symbols of signature SIG."
-  (aif (gethash (string id) (signature-decls sig))
+ (ftype (function (symbol some-pvs-type signature) (or null symbol)) find1))
+(defun find1 (sym ty sig)
+  "Get the appropriate identifier for PVS symbol identified with symbol SYM of
+type TY among defined symbols of signature SIG."
+  (aif (gethash sym (signature-decls sig))
        (aif (cl:find ty it :test #'some-pvs-type-eq :key #'variant-type)
-            (concatenate 'string (string id) (variant-suffix it)))))
+            (symb sym (variant-suffix it)))))
 
-(declaim (ftype (function (symbol some-pvs-type list) (or null string))))
-(defun find* (id ty sigs)
-  "Search for symbol ID of type TY among signatures SIGS."
+(declaim (ftype (function (symbol some-pvs-type list) (or null symbol))))
+(defun find* (sym ty sigs)
+  "Search for symbol SYM of type TY among signatures SIGS."
   (when sigs
-    (aif (find1 id ty (car sigs)) it
-         (find* id ty (cdr sigs)))))
+    (aif (find1 sym ty (car sigs)) it
+         (find* sym ty (cdr sigs)))))
 
-(defun find (id ty sig)
+(defun find (sym ty sig)
   "Find symbol SYM of type TY in signature(s) SIG."
-  (if (listp sig) (find* id ty sig) (find1 id ty sig)))
+  (if (listp sig) (find* sym ty sig) (find1 sym ty sig)))
 
 (declaim (ftype (function (stream variant) *) pp-variant))
 (defun pp-variant (stream v &optional colon-p at-sign-p)
@@ -148,7 +147,7 @@ among defined symbols of signature SIG."
 (defrule stringlit (and #\" (* (not #\")) #\")
   (:destructure (qu1 el qu2)
     (declare (ignore qu1 qu2))
-    (concatenate 'string el)))
+    (apply #'mkstr el)))
 
 ;; Parses a cell of the form "(" pvs-type "." stringlit ")"
 (defrule variant
@@ -167,7 +166,7 @@ among defined symbols of signature SIG."
   (:destructure
     (pa1 sym w1 dot w2 pa2 variants pa3 pa4)
     (declare (ignore pa1 w1 dot w2 pa2 pa3 pa4))
-    (cons sym variants)))
+    (cons (symb sym) variants)))
 
 (defrule sig-top (and #\( (? whitespace) (* (and sig-decl (? whitespace))) #\))
   (:destructure
@@ -189,7 +188,7 @@ among defined symbols of signature SIG."
            (assert
             succ () "Open signature failed: can't parse signature.")
            (assert (every #'variants-p (mapcar #'cdr prod)))
-           (assert (every #'stringp (mapcar #'car prod)))
+           (assert (every #'symbolp (mapcar #'car prod)))
            prod))
        (ht (make-hash-table)))
     (mapc #'(lambda (d) (setf (gethash (car d) ht) (cdr d))) decls)
