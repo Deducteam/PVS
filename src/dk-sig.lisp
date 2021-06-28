@@ -61,6 +61,7 @@ along with the suffix of the new variant."
 if they are `pvs::tc-eq'."
   (or (and (null x) (null y)) (and x y (pvs::tc-eq x y))))
 
+;; TODO add opened signatures to `add' to perform overloading across theories
 (declaim
  (ftype (function (symbol some-pvs-type signature)
                   (values string signature)) add))
@@ -68,15 +69,14 @@ if they are `pvs::tc-eq'."
   "Add the declaration of symbol ID of type TY to the signature SIG and return
 the new identifier that is to be used in place of ID and the new signature.
 Destructive on SIG."
-  (let* ((sid (string id))
-         (vs (gethash sid (signature-decls sig))))
-    (if (null vs)
-        (progn
-          (setf (gethash sid (signature-decls sig)) (init-variants sid ty))
-          (values (string id) sig))
-        (multiple-value-bind (suff vs) (add-variant ty vs)
-          (setf (gethash sid (signature-decls sig)) vs)
-          (values (concatenate 'string (string id) suff) sig)))))
+  (let ((sid (string id))) ;for some reason it doesn't work with mkstr
+    (aif (gethash sid (signature-decls sig))
+         (multiple-value-bind (suff vs) (add-variant ty it)
+           (setf (gethash sid (signature-decls sig)) vs)
+           (values (concatenate 'string sid suff) sig))
+         (progn
+           (setf (gethash sid (signature-decls sig)) (init-variants sid ty))
+           (values sid sig)))))
 
 (declaim
  (ftype (function (symbol some-pvs-type signature) (or null string)) find1))
