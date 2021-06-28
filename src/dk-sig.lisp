@@ -5,7 +5,7 @@ overloading from PVS' theories")
   (:import-from :pvs :aif)
   (:export
    :signature :make-signature :signature-theory
-   :find :find* :add
+   :find :add
    :open :dump)
   (:shadow :open :find))
 
@@ -79,8 +79,8 @@ Destructive on SIG."
           (values (concatenate 'string (string id) suff) sig)))))
 
 (declaim
- (ftype (function (symbol some-pvs-type signature) (or null string)) find))
-(defun find (id ty sig)
+ (ftype (function (symbol some-pvs-type signature) (or null string)) find1))
+(defun find1 (id ty sig)
   "Get the appropriate identifier for PVS symbol identified with ID of type TY
 among defined symbols of signature SIG."
   (aif (gethash (string id) (signature-decls sig))
@@ -91,8 +91,12 @@ among defined symbols of signature SIG."
 (defun find* (id ty sigs)
   "Search for symbol ID of type TY among signatures SIGS."
   (when sigs
-    (aif (find id ty (car sigs)) it
+    (aif (find1 id ty (car sigs)) it
          (find* id ty (cdr sigs)))))
+
+(defun find (id ty sig)
+  "Find symbol SYM of type TY in signature(s) SIG."
+  (if (listp sig) (find* id ty sig) (find1 id ty sig)))
 
 (declaim (ftype (function (stream variant) *) pp-variant))
 (defun pp-variant (stream v &optional colon-p at-sign-p)

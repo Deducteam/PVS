@@ -853,7 +853,7 @@ overloading."
           stream "~{ {~/pvs:pp-sym/}~}"
           (mapcar #'id (reverse *thy-bindings*))))))
     ;; Symbol from an opened signature
-    ((dksig:find* id ty *opened-signatures*) (pprint-ident it stream))
+    ((dksig:find id ty *opened-signatures*) (pprint-ident it stream))
     ;; Symbol from an imported theory
     (t
      (with-parens (stream (consp actuals))
