@@ -580,7 +580,7 @@ the declaration of TYPE FROM."
              (bindings (append thy-bds (car form-spec))))
         (pprint-abstraction type-expr bindings stream
                             :impl (length *thy-bindings*)))
-      (write-char #\; stream))))
+      (write-string " begin admitted;" stream))))
 
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
