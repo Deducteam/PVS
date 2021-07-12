@@ -1,3 +1,38 @@
+(defpackage dklog
+  (:documentation "Some logging facilities.")
+  (:use :cl)
+  (:export :top :expr :type :decl :sign :contexts)
+  (:shadow :expr :type :decl :sign :contexts))
+
+(in-package :dklog)
+
+(defvar *log-file* "/tmp/pp-dk3.log" "File used for logging and debugging.")
+
+(defun dk-log (tag format-str &rest args)
+  "Like format *log-file* FORMAT-STR ARGS adding timestamp, informative tag TAG
+at the beginning of line and terminating line."
+  (with-open-file
+      (out *log-file* :direction :output :if-exists :append
+                      :if-does-not-exist :create)
+    (multiple-value-bind (second minute hour date month year dow dst-p tz)
+        (get-decoded-time)
+      (declare (ignore date month year dow dst-p tz))
+      (format out "[~d:~d:~d] " hour minute second))
+    (if tag (format out "[~a] " tag))
+    (apply #'format out format-str args)
+    (terpri out)))
+
+(defun top (format-str &rest args)
+  (apply #'dk-log nil format-str args))
+(defun sign (format-str &rest args)
+  (apply #'dk-log "sign" format-str args))
+(defun decl (format-str &rest args)
+  (apply #'dk-log "decl" format-str args))
+(defun expr (format-str &rest args)
+  (apply #'dk-log "expr" format-str args))
+(defun type (format-str &rest args)
+  (apply #'dk-log "type" format-str args))
+
 (defpackage dksig
   (:documentation "Signatures for the export to Dedukti. They allow to remove
 overloading from PVS' theories")
@@ -58,8 +93,8 @@ along with the suffix of the new variant."
 (declaim (ftype (function (some-pvs-type some-pvs-type) *) some-pvs-type-eq))
 (defun some-pvs-type-eq (x y)
   "PVS equality on optional terms. X and Y are equal if they are both `nil' or
-if they are `pvs::tc-eq'."
-  (or (and (null x) (null y)) (and x y (pvs::tc-eq x y))))
+if they are `pvs:ps-eq'. Behaviour on open term is undefined."
+  (or (and (null x) (null y)) (and x y (pvs:ps-eq x y))))
 
 ;; TODO add opened signatures to `add' to perform overloading across theories
 (declaim
@@ -89,9 +124,8 @@ type TY among defined symbols of signature SIG."
 (declaim (ftype (function (symbol some-pvs-type list) (or null symbol))))
 (defun find* (sym ty sigs)
   "Search for symbol SYM of type TY among signatures SIGS."
-  (when sigs
-    (aif (find1 sym ty (car sigs)) it
-         (find* sym ty (cdr sigs)))))
+  (if (consp sigs)
+      (aif (find1 sym ty (car sigs)) it (find* sym ty (cdr sigs)))))
 
 (defun find (sym ty sig)
   "Find symbol SYM of type TY in signature(s) SIG."

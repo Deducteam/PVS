@@ -86,40 +86,6 @@ will be added into signature SIG at the end of BODY"
 (deftype polylist (ty)
   `(or (cons ,ty list) null))
 
-(defpackage dklog
-  (:documentation "Some logging facilities.")
-  (:use :cl)
-  (:export :top :expr :type :decl :contexts)
-  (:shadow :expr :type :decl :contexts))
-
-(in-package :dklog)
-
-(defvar *log-file* "/tmp/pp-dk3.log" "File used for logging and debugging.")
-
-(defun dk-log (tag format-str &rest args)
-  "Like format *log-file* FORMAT-STR ARGS adding timestamp, informative tag TAG
-at the beginning of line and terminating line."
-  (with-open-file
-      (out *log-file* :direction :output :if-exists :append
-                      :if-does-not-exist :create)
-    (multiple-value-bind (second minute hour date month year dow dst-p tz)
-        (get-decoded-time)
-      (format out "[~d:~d:~d] " hour minute second))
-    (if tag (format out "[~a] " tag))
-    (apply #'format out format-str args)
-    (terpri out)))
-
-(defun top (format-str &rest args)
-  (apply #'dk-log nil format-str args))
-(defun decl (format-str &rest args)
-  (apply #'dk-log "decl" format-str args))
-(defun expr (format-str &rest args)
-  (apply #'dk-log "expr" format-str args))
-(defun type (format-str &rest args)
-  (apply #'dk-log "type" format-str args))
-
-(in-package :pvs)
-
 (declaim (ftype (function (syntax string) *) to-dk3))
 (defun to-dk3 (obj file)
   "Export PVS object OBJ to Dedukti file FILE using Dedukti3 syntax."
@@ -845,6 +811,8 @@ overloading."
     ((assoc id *dk-sym-map*) (pp-sym stream id))
     ;; Symbol from the current signature
     ((dksig:find id ty *signature*)
+     (dklog:sign "Symbol \"~a: ~a\" found as \"~a\" in current signature."
+                 id ty it)
      (with-parens (stream (consp *thy-bindings*))
        (pprint-ident it stream)
        (when *thy-bindings*
@@ -854,10 +822,13 @@ overloading."
           (mapcar #'id (reverse *thy-bindings*))))))
     ;; Symbol from an opened signature
     ((dksig:find id ty *opened-signatures*)
+     (dklog:sign "Symbol \"~a: ~a\" found as \"~a\" in opened signatures."
+                 id ty it)
      (with-parens (stream (and wrap (consp actuals)))
-       (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" id actuals)))
+       (format stream "~/pvs:pp-sym/~{ {~/pvs:pp-dk/}~}" it actuals)))
     ;; Symbol from an imported theory
     (t
+     (dklog:top "Symbol \"~a: ~a\" not found in signatures." id ty)
      (with-parens (stream (consp actuals))
        (when mod-id
          ;; TODO fail if `mod-id' is `nil'
