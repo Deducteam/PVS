@@ -7,6 +7,6 @@ while read -r line; do
     if (print -f "${nocom}" | grep -E -q '^-'); then
         fname="${nocom:1}"
         [ -r "${fname}.lp" ] || printf '// Dummy theory\n' > "${fname}.lp"
-        [ -r "${fname}.pvsig" ] || printf '()' > "${fname}.pvsig"
+        [ -r "${fname}.lisp" ] || printf '()' > "${fname}.lisp"
     fi
 done < 'theories'

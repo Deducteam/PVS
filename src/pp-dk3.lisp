@@ -54,10 +54,10 @@ the symbols with a module id.")
   (setf *workdir* path))
 
 (defun dump-sig ()
-  "Write the signature of the current theory to filename `theory.pvsig'."
+  "Write the signature of the current theory to filename `theory.lisp'."
   (let* ((filename (string (dksig:signature-theory *signature*)))
          (path (pvs::merge-pathnames
-                *workdir* (make-pathname :name filename :type "pvsig"))))
+                *workdir* (make-pathname :name filename :type "lisp"))))
     (with-open-file (s path :direction :output :if-exists :supersede
                             :if-does-not-exist :create)
       (dksig:dump *signature* s))))
@@ -67,12 +67,9 @@ the symbols with a module id.")
   (let*
       ((filename (string theory))
        (path (pvs::merge-pathnames
-              *workdir* (make-pathname :name filename :type "pvsig")))
-       (content
-         (with-open-file (s path :direction :input)
-           (loop for line = (read-line s nil) while line collect line)))
-       (content (format nil "~{~a~^~%~}" content))
-       (newsig (dksig:open theory content)))
+              *workdir* (make-pathname :name filename :type "lisp")))
+       (newsig (with-open-file (s path :direction :input)
+                 (dksig:open theory s))))
     (setf *opened-signatures* (cons newsig *opened-signatures*))))
 
 (defmacro with-sig-update ((bind sym ty sig) &body body)

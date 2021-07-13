@@ -36,7 +36,7 @@ at the beginning of line and terminating line."
 (defpackage dksig
   (:documentation "Signatures for the export to Dedukti. They allow to remove
 overloading from PVS' theories")
-  (:use :cl :esrap)
+  (:use :cl)
   (:import-from :pvs :aif :mkstr :symb)
   (:export
    :signature :make-signature :signature-theory
@@ -166,60 +166,32 @@ type TY among defined symbols of signature SIG."
 ;;; carets to ease parsing. And di,j are the symbols used into the Dedukti
 ;;; translation, to bypass overloading.
 
-(defrule whitespace (+ (or #\Space #\Tab #\Newline))
-  (:constant nil))
+(declaim (ftype (function (string) some-pvs-type) open-some-pvs-type))
+(defun open-some-pvs-type (pty)
+  (if (string/= pty "NIL") (pvs::parse :string pty :nt 'pvs:type-expr)))
 
-(defrule stringlit (and #\" (* (not #\")) #\")
-  (:destructure (qu1 el qu2)
-    (declare (ignore qu1 qu2))
-    (apply #'mkstr el)))
+(declaim (ftype (function (cons) variant) open-variant))
+(defun open-variant (ts)
+  (destructuring-bind (ty . suff) ts
+    (make-variant :type (open-some-pvs-type ty) :suffix suff)))
 
-;; Parse a PVS type surrounded by dollars
-(defrule some-pvs-type stringlit
-  (:lambda (ty)
-    (if (string/= ty "NIL") (pvs::parse :string ty :nt 'pvs:type-expr))))
+(defun open* (s)
+  (let*
+      ((presig
+         (cond ((stringp s) (with-input-from-string (is s) (read is)))
+               ((streamp s) (read s))
+               (t (error "Cannot read from ~a." s)))))
+    (assert (listp presig))
+    (assert (every #'consp presig))
+    (assert (every (lambda (sv) (stringp (car sv)) (listp (cdr sv))) presig))
+    (mapcar
+     (lambda (sv) (cons (symb (car sv)) (mapcar #'open-variant (cdr sv))))
+     presig)))
 
-;; Parses a cell of the form "(" pvs-type "." stringlit ")"
-(defrule variant
-    (and #\( some-pvs-type (? whitespace) #\. (? whitespace) stringlit #\))
-  (:destructure (ca1 ty w1 d w2 str ca2)
-    (declare (ignore ca1 w1 d w2 ca2))
-    (make-variant :type ty :suffix str)))
-
-;; Parses a list of cells
-(defrule variants (* (and variant (? whitespace)))
-  (:lambda (cs) (mapcar #'car cs)))
-
-;; Parses the declaration of a symbol "(" stringlit . "(" cells ")" ")"
-(defrule sig-decl
-    (and #\( stringlit (? whitespace) #\. (? whitespace) #\( variants #\) #\))
-  (:destructure
-    (pa1 sym w1 dot w2 pa2 variants pa3 pa4)
-    (declare (ignore pa1 w1 dot w2 pa2 pa3 pa4))
-    (cons (symb sym) variants)))
-
-(defrule sig-top (and #\( (? whitespace) (* (and sig-decl (? whitespace))) #\))
-  (:destructure
-    ;; Keep only the variants
-    (pa1 w cells pa2)
-    (declare (ignore pa1 w pa2))
-    cells)
-  (:lambda (cells)
-    ;; Remove the whitespace from parsed element
-    (mapcar #'car cells)))
-
-(declaim (ftype (function (* string) signature) open))
 (defun open (theory s)
-  "Create a signature for theory THEORY from stream S."
-  (let
-      ((decls
-         (multiple-value-bind (prod pos succ) (esrap:parse 'sig-top s)
-           (declare (ignore pos))
-           (assert
-            succ () "Open signature failed: can't parse signature.")
-           (assert (every #'variants-p (mapcar #'cdr prod)))
-           (assert (every #'symbolp (mapcar #'car prod)))
-           prod))
-       (ht (make-hash-table)))
-    (mapc #'(lambda (d) (setf (gethash (car d) ht) (cdr d))) decls)
+  (let ((decls (open* s))
+        (ht (make-hash-table)))
+    (assert (every #'variants-p (mapcar #'cdr decls)))
+    (assert (every #'symbolp (mapcar #'car decls)))
+    (mapc (lambda (d) (setf (gethash (car d) ht) (cdr d))) decls)
     (make-signature :theory theory :decls ht)))

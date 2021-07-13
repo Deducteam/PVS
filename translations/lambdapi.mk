@@ -11,4 +11,4 @@ LPC ?=
 
 .PHONY: clean
 clean:
-	rm -rf *.lp *.lpo *.pvsig
+	rm -rf *.lp *.lpo *.lisp

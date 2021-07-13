@@ -308,7 +308,6 @@
 		(setq *pvs-git-describe* (pvs::pvs-git-description))
 		(pvs::write-pvs-version-file)
 		)
-  :depends-on ("esrap")
   :components
   ((:module ground-prover
     :source-pathname "src/ground-prover/"
