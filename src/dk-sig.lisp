@@ -140,7 +140,7 @@ type TY among defined symbols of signature SIG."
     (let ((pvs::*pp-no-newlines?* t)
           (pvs::*pp-compact* t)
           (pvs::*pp-print-pretty* nil))
-      (format stream "($~a$ . \"~a\")" type suffix))))
+      (format stream "(\"~a\" . \"~a\")" type suffix))))
 
 (declaim (ftype (function (stream signature) *) pp-signature))
 (defun pp-signature (s sig &optional colon-p at-sign-p)
@@ -159,8 +159,8 @@ type TY among defined symbols of signature SIG."
 
 ;;; Rules to parse saved to disk signatures
 ;;; Signatures are saved in the following format
-;;; (("s0" . ($ty0,0$ . "d0,0") ($ty0,1$ . "d0,1"))
-;;;  ("s1" . ($ty1,0$ . "d1,0") ($ty1.1$ . "d1.1")))
+;;; (("s0" . ("ty0,0" . "d0,0") ("ty0,1" . "d0,1"))
+;;;  ("s1" . ("ty1,0" . "d1,0") ("ty1.1" . "d1.1")))
 ;;; where s0, s1 are the symbols from PVS, tyi,j are the types of these symbols,
 ;;; there may be several types when the symbol is overloaded. Types are between
 ;;; carets to ease parsing. And di,j are the symbols used into the Dedukti
@@ -169,19 +169,15 @@ type TY among defined symbols of signature SIG."
 (defrule whitespace (+ (or #\Space #\Tab #\Newline))
   (:constant nil))
 
-;; Parse a PVS type surrounded by dollars
-(defrule some-pvs-type (and #\$ (+ (not #\$)) #\$)
-  (:destructure (op ty cl)
-    (declare (ignore op cl))
-    (let ((ty (concatenate 'string ty)))
-      (if (string= ty "NIL") nil
-          (pvs::parse :string ty :nt 'pvs:type-expr)))))
-
-;; Transform a string into a symbol
 (defrule stringlit (and #\" (* (not #\")) #\")
   (:destructure (qu1 el qu2)
     (declare (ignore qu1 qu2))
     (apply #'mkstr el)))
+
+;; Parse a PVS type surrounded by dollars
+(defrule some-pvs-type stringlit
+  (:lambda (ty)
+    (if (string/= ty "NIL") (pvs::parse :string ty :nt 'pvs:type-expr))))
 
 ;; Parses a cell of the form "(" pvs-type "." stringlit ")"
 (defrule variant
