@@ -36,28 +36,29 @@ jobs:
       run: |
         sudo wget https://github.com/ocaml/opam/releases/download/2.0.5/opam-2.0.5-x86_64-linux -O /usr/bin/opam
         sudo chmod 755 /usr/bin/opam
-        opam init -a --disable-sandboxing --compiler="4.07.1"
+        opam init -a --disable-sandboxing --compiler="4.11.1"
         opam update
-        opam switch "4.07.1"
+        opam switch "4.11.1"
         eval $(opam env)
-        opam install alt-ergo.2.3.0 --yes
         git clone https://github.com/gabrielhdt/lambdapi.git lambdapi
-        (cd lambdapi || exit 1; git checkout refiner
-         opam pin add -n -k path lambdapi .)
-        opam install --deps-only -t -d lambdapi --yes
+        (cd lambdapi || exit 1; git checkout refiner; opam pin add -n lambdapi .)
+        opam install --yes --deps-only lambdapi
         (cd lambdapi || exit 1; make install)
         why3 config detect
 
     - name: personoj install
       run: |
         git clone https://github.com/Deducteam/personoj.git personoj
+        (cd personoj || exit 1; git checkout 62085d29abb4e0eb2333541df4ed2735ad47f1cf)
         eval $(opam env)
-        (cd personoj/personoj || exit 1; bmake install)
+        (cd personoj/personoj || exit 1; bmake; bmake install)
 
     - name: translate and typecheck
       run: |
         eval $(opam env)
         # Go to the last theory that typechecks "reals" in this case
-        for th in "$(head -n 54 translations/prelude/theories | grep -v -E '^-|\#')"; do
-            bmake -C translations/prelude "${th}.lpo"
+        cd translations/prelude || exit 1
+        bmake dummy
+        for th in $(head -n 54 theories | grep -v -E '^-|\#'); do
+            bmake "${th}.lpo"
         done
