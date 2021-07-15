@@ -51,9 +51,8 @@ jobs:
     - name: personoj install
       run: |
         git clone https://github.com/Deducteam/personoj.git personoj
-        cd personoj || exit 1
         eval $(opam env)
-        bmake install
+        (cd personoj/personoj || exit 1; bmake install)
 
     - name: translate and typecheck
       run: |
