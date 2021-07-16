@@ -41,7 +41,7 @@ jobs:
         opam switch "4.11.1"
         eval $(opam env)
         git clone https://github.com/gabrielhdt/lambdapi.git lambdapi
-        (cd lambdapi || exit 1; git checkout refiner; opam pin add -n lambdapi .)
+        (cd lambdapi || exit 1; git checkout a1a87fd58feaf28ce6984fded92629ce655549aa; opam pin add -n lambdapi .)
         opam install --yes --deps-only lambdapi
         (cd lambdapi || exit 1; make install)
         why3 config detect
@@ -59,6 +59,6 @@ jobs:
         # Go to the last theory that typechecks "reals" in this case
         cd translations/prelude || exit 1
         bmake dummy
-        for th in $(head -n 54 theories | grep -v -E '^-|\#'); do
+        for th in $(head -n 60 theories | grep -v -E '^-|\#'); do
             bmake "${th}.lpo"
         done
