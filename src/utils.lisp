@@ -31,7 +31,7 @@
 
 ;;(proclaim '(inline resolution))
 
-(export '(mkstr symb aif acond argument* copy-all copy-context
+(export '(single mkstr symb aif acond argument* copy-all copy-context
 	  current-declarations-hash current-theory current-theory-name
 	  current-using-hash file-older find-supertype get-theory lf
 	  make-new-context mapappend operator* prover-status put-decl
@@ -39,6 +39,9 @@
 	  pvs-git-description ref-to-id next-proof-id make-default-proof))
 
 (declaim (notinline current-theory))
+
+(defun single (lst)
+  (and (consp lst) (not (cdr lst))))
 
 (defun mkstr (&rest args)
   (with-output-to-string (s)
