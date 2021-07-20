@@ -37,7 +37,7 @@ at the beginning of line and terminating line."
   (:documentation "Signatures for the export to Dedukti. They allow to remove
 overloading from PVS' theories")
   (:use :cl)
-  (:import-from :pvs :aif :mkstr :symb)
+  (:import-from :pvs :aif :mkstr :symb :append1 :lrec)
   (:export
    :signature :make-signature :signature-theory
    :find :add
@@ -75,20 +75,14 @@ symbols as they appear in PVS to a list of variants."
   theory
   (decls (make-hash-table)))
 
-(declaim (ftype (function (* some-pvs-type) variants) init-variants))
-(defun init-variants (id ty)
-  "Create a new list of variants for symbol of identifier ID whose type is TY."
-  (declare (ignore id))
-  (list (make-variant :type ty)))
+(defun count-definitions (sym sigs)
+  "Count the number of definitions of symbol SYM inside signatures SIGS"
+  (flet ((count (sig) (aif (gethash sym (signature-decls sig)) (length it) 0)))
+    (funcall (lrec (lambda (sig f) (+ (count sig) (funcall f))) 0) sigs)))
 
-(declaim (ftype (function (some-pvs-type variants)
-                          (values string variants)) add-variant))
-(defun add-variant (ty vs)
-  "Add a variant with type TY to variants VS and return the new list of variants
-along with the suffix of the new variant."
-  (let* ((suff (format nil "~36r" (length vs)))
-         (v (make-variant :type ty :suffix suff)))
-    (values suff (append vs (list v)))))
+(declaim (ftype (function (integer) string) mksuffix))
+(defun mksuffix (n)
+  (format nil "~36r" n))
 
 (declaim (ftype (function (some-pvs-type some-pvs-type) *) some-pvs-type-eq))
 (defun some-pvs-type-eq (x y)
@@ -96,21 +90,25 @@ along with the suffix of the new variant."
 if they are `pvs:ps-eq'. Behaviour on open term is undefined."
   (or (and (null x) (null y)) (and x y (pvs:ps-eq x y))))
 
-;; TODO add opened signatures to `add' to perform overloading across theories
 (declaim
- (ftype (function (symbol some-pvs-type signature)
+ (ftype (function (symbol some-pvs-type signature list)
                   (values symbol signature)) add))
-(defun add (sym ty sig)
-  "Add the declaration of symbol sym of type TY to the signature SIG and return
-the new identifier that is to be used in place of SYM and the new signature.
-Destructive on SIG."
-  (aif (gethash sym (signature-decls sig))
-       (multiple-value-bind (suff vs) (add-variant ty it)
-         (setf (gethash sym (signature-decls sig)) vs)
-         (values (symb sym suff) sig))
-       (progn
-         (setf (gethash sym (signature-decls sig)) (init-variants sym ty))
-         (values sym sig))))
+(defun add (sym ty sig opened)
+  "Add the declaration of symbol SYM of type TY to the signature SIG considering
+that signatures OPENED are opened, and return the new identifier that is to be
+used in place of SYM and the new signature.  Destructive on SIG."
+  (assert (every #'signature-p opened))
+  (let ((ndefs (count-definitions sym opened)))
+    (assert (numberp ndefs))
+    (aif (gethash sym (signature-decls sig))
+         (let ((suffix (mksuffix (+ (length it) ndefs))))
+           (setf (gethash sym (signature-decls sig))
+                 (append1 it (make-variant :type ty :suffix suffix)))
+           (values (symb sym suffix) sig))
+         (let* ((suffix (if (= ndefs 0) "" (mksuffix ndefs)))
+                (initial (list (make-variant :type ty :suffix suffix))))
+           (setf (gethash sym (signature-decls sig)) initial)
+           (values (symb sym suffix) sig)))))
 
 (declaim
  (ftype (function (symbol some-pvs-type signature) (or null symbol)) find1))

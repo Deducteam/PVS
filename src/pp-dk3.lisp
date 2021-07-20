@@ -72,11 +72,12 @@ the symbols with a module id.")
                  (dksig:open theory s))))
     (setf *opened-signatures* (cons newsig *opened-signatures*))))
 
-(defmacro with-sig-update ((bind sym ty sig) &body body)
+(defmacro with-sig-update ((bind sym ty sig &optional opened) &body body)
   "Bind BIND with the symbol name for ID which denotes a symbol of type TY that
-will be added into signature SIG at the end of BODY"
+will be added into signature SIG with opened signatures OPENED at the end of
+BODY."
   (let ((newsig (gensym)))
-    `(multiple-value-bind (,bind ,newsig) (dksig:add ,sym ,ty ,sig)
+    `(multiple-value-bind (,bind ,newsig) (dksig:add ,sym ,ty ,sig ,opened)
        ,@body
        (setf sig ,newsig))))
 
@@ -530,7 +531,7 @@ the declaration of TYPE FROM."
   "t: TYPE."
   (dklog:decl "type decl")
   (with-slots (id) decl
-    (with-sig-update (newid id nil *signature*)
+    (with-sig-update (newid id nil *signature* *opened-signatures*)
       (format stream "constant symbol ~/pvs:pp-sym/: " newid)
       (pprint-thy-formals *type* :kind stream t)
       (write-char #\; stream))))
@@ -539,7 +540,7 @@ the declaration of TYPE FROM."
   "t: TYPE = x, but also domain(f): TYPE = D"
   (dklog:decl "type-eq-decl")
   (with-slots (id type-expr formals) decl
-    (with-sig-update (newid id nil *signature*)
+    (with-sig-update (newid id nil *signature* *opened-signatures*)
       (format stream "symbol ~/pvs:pp-sym/: " newid)
       (let* ((args (car (pack-arg-tuple formals)))
              (bds (nconc (reverse *thy-bindings*) args)))
@@ -559,7 +560,7 @@ the declaration of TYPE FROM."
   (dklog:contexts "type from" decl)
   (dklog:decl "type-from-decl")
   (with-slots (id predicate supertype) decl
-    (with-sig-update (newid id nil *signature*)
+    (with-sig-update (newid id nil *signature* *opened-signatures*)
       ;; PREDICATE is a type declaration
       (format stream "symbol ~/pvs:pp-sym/: " newid)
       (pprint-thy-formals *type* :kind stream t)
@@ -579,7 +580,7 @@ the declaration of TYPE FROM."
     ;; TODO the type is for now `nil', something more meaningful must be used,
     ;; in accordance to what the type is when the name of the  formula is
     ;; printed
-    (with-sig-update (newid id nil *signature*)
+    (with-sig-update (newid id nil *signature* *opened-signatures*)
       (flet
           ((univ-closure (ex)
              (let* ((free-ids (mapcar #'id (freevars ex)))
@@ -606,7 +607,7 @@ the declaration of TYPE FROM."
   (dklog:contexts "const-decl")
   (with-slots (id type definition formals) decl
     (format stream "// Constant declaration ~a~%" id)
-    (with-sig-update (newid id type *signature*)
+    (with-sig-update (newid id type *signature* *opened-signatures*)
       (if definition
           (let* ((form-proj (pack-arg-tuple formals))
                  (*packed-tuples* (cdr form-proj))
@@ -633,7 +634,7 @@ the declaration of TYPE FROM."
   (dklog:decl "inductive: ~S" (id decl))
   (with-slots (id type definition formals) decl
     (format stream "// Inductive definition ~a~%" id)
-    (with-sig-update (newid id type *signature*)
+    (with-sig-update (newid id type *signature* *opened-signatures*)
       (let* ((form-proj (pack-arg-tuple formals))
              (*packed-tuples* (cdr form-proj))
              (ctx-thy (reverse *thy-bindings*))
