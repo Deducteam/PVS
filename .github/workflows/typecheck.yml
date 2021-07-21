@@ -1,0 +1,64 @@
+name: typecheck
+
+on:
+  push:
+    branches: [ prettyprint-dedukti ]
+  pull_request:
+    branches: [ prettyprint-dedukti ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: sbcl setup
+      run: |
+        sudo apt install --yes emacs ksh bmake
+        url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
+        cd ${HOME} || exit 1
+        curl "$url" -L | tar jx
+        ln -s sbcl* sbcl
+
+    - name: compile pvs
+      run: |
+        autoconf
+        ./configure
+        export EMACS="$(command -v emacs)"
+        export SBCLISP_HOME="${HOME}/sbcl"
+        for p in $(ls translations/prelude_patches/ | sort); do
+            patch lib/prelude.pvs "translations/prelude_patches/${p}"
+        done
+        make >output 2>&1
+
+    - name: lambdapi install
+      run: |
+        sudo wget https://github.com/ocaml/opam/releases/download/2.0.5/opam-2.0.5-x86_64-linux -O /usr/bin/opam
+        sudo chmod 755 /usr/bin/opam
+        opam init -a --disable-sandboxing --compiler="4.11.1"
+        opam update
+        opam switch "4.11.1"
+        eval $(opam env)
+        git clone https://github.com/gabrielhdt/lambdapi.git lambdapi
+        (cd lambdapi || exit 1; git checkout a1a87fd58feaf28ce6984fded92629ce655549aa; opam pin add -n lambdapi .)
+        opam install --yes --deps-only lambdapi
+        (cd lambdapi || exit 1; make install)
+        why3 config detect
+
+    - name: personoj install
+      run: |
+        git clone https://github.com/Deducteam/personoj.git personoj
+        (cd personoj || exit 1; git checkout 58de7512a3b7ba5a9cfc2f0e3237a975d161175c)
+        eval $(opam env)
+        (cd personoj/personoj || exit 1; bmake; bmake install)
+
+    - name: translate and typecheck
+      run: |
+        eval $(opam env)
+        # Go to the last theory that typechecks "reals" in this case
+        cd translations/prelude || exit 1
+        bmake dummy
+        for th in $(head -n 60 theories | grep -v -E '^-|\#'); do
+            bmake "${th}.lpo"
+        done

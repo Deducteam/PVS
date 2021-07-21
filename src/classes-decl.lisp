@@ -138,7 +138,7 @@
 	  projection-application quant-expr range recognizer record-expr
 	  recordtype resolutions saved-context script simple-constructor status
 	  subtype supertype theory theory-name tuple-expr tupletype type
-	  type-decl type-def-decl type-expr type-name type-name? type-value
+	  type-decl type-def-decl type-expr type-expr? type-name type-name? type-value
 	  typed-declaration types update-expr using-hash var-decl visible?
 	  recursive-type inline-recursive-type adt-constructor))
 #+(or cmu sbcl)

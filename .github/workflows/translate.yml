@@ -1,0 +1,47 @@
+name: translate
+
+on:
+  push:
+    branches: [ prettyprint-dedukti ]
+  pull_request:
+    branches: [ prettyprint-dedukti ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: sbcl setup
+      run: |
+        sudo apt install --yes emacs ksh bmake
+        url="https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2"
+        cd ${HOME} || exit 1
+        curl "$url" -L | tar jx
+        ln -s sbcl* sbcl
+
+    - name: compile pvs
+      run: |
+        autoconf
+        ./configure
+        export EMACS="$(command -v emacs)"
+        export SBCLISP_HOME="${HOME}/sbcl"
+        for p in $(ls translations/prelude_patches/ | sort); do
+            patch lib/prelude.pvs "translations/prelude_patches/${p}"
+        done
+        make >output 2>&1
+
+    - name: unit tests
+      run: |
+        bmake -C translations/simple translate
+
+    - name: prelude
+      run: |
+        bmake -C translations/prelude translate
+
+    - name: upload files
+      uses: actions/upload-artifact@v2
+      with:
+        name: lp-exports
+        path: translations/

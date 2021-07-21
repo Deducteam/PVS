@@ -204,84 +204,84 @@
   :source-extension "lisp"
   :binary-extension #.*pvs-binary-type*
   :initially-do (unless *pvs-system-loaded*
-		  (proclaim '(optimize (compilation-speed 0) (space 1)
-			      (safety 1) (speed 3) (debug 1)))
-		  ;; Note that these do very little SBCL simply does
-		  ;; not want to shut up
-		  #+sbcl
-		  (declaim (sb-ext:muffle-conditions cl:warning))
-		  #+sbcl
-		  (declaim (sb-ext:muffle-conditions cl:style-warning))
-		  #+sbcl
-		  (declaim (sb-ext:muffle-conditions sb-ext:compiler-note))
-		  (unless (boundp '*print-pprint-dispatch*)
-		    #-gcl
-		    (load (format nil "~a/src/xp" *pvs-path*))
-		    #+gcl
-		    (load (format nil "~a/src/xp-code" *pvs-path*))
-		    #-sbcl
-		    (apply (find-symbol :install :xp) :package :pvs nil)
-		    #+sbcl
-		    (apply (find-symbol "INSTALL" (find-package :xp))
-			   :package :pvs nil))
-		  #-(or cmu sbcl)
-		  (load (format nil "~a/ess/dist-ess.lisp" *pvs-path*))
-		  #-gcl
-		  (generate-ess ergolisp)
-		  #+gcl
-		  (load (format nil "~a/ess/allegro-runtime.lisp" *pvs-path*))
-		  #+allegro (require :loop)
-		  #+gcl (load (format nil "~a/src/loop" *pvs-path*))
-		  #-cmu18
-		  (in-package :pvs)
-		  (use-package '(:ergolisp :oper :occ :term :sort
-				 :sb-runtime :lang :newattr))
-		  #+gcl (defmacro ignore-errors (&body forms)
-			  `(progn ,@forms))
-		  ;;#+(or cmu sbcl)
-		  ;;(let* ((platform "ix86-Linux")
-			;; (bddpath (concatenate 'string
-				;;	       *pvs-path* "/src/BDD/" platform)))
-		    ;; hack, because load-object-file isn't exported.
-		    ;; but .. it's the only way to load a *shared* object file!
-		    ;; (with cmucl1.8e, anyway)
-		    
-		    ;; SO - If we load here, the resulting image will create
-		    ;; a segmentation fault, even if we reload at startup.
-		    ;; So instead, we only load at startup (see pvs-init
-		    ;; in src/pvs.lisp)
-		    
-		    ;;(ext:load-foreign (format nil "~a/mu.so" bddpath))
-		    ;;)
-		  #+(and allegro dynload)
-		  (let* ((platform #+(and sun4 sunos4) "sun4-SunOS4"
-				   #+(and sun4 (not sunos4)) "sun4-SunOS5"
-				   #+(and x86 (not macosx)) "ix86-Linux"
-				   #+(and x86-64 (not macosx)) "ix86_64-Linux"
-				   #+(and macosx powerpc) "powerpc-MacOSX"
-				   #+(and macosx (or x86 x86-64)) "ix86-MacOSX")
-			 (utilpath (concatenate 'string
-				     *pvs-path* "/src/utils/" platform))
-			 (bddpath (concatenate 'string
-				    *pvs-path* "/src/BDD/" platform))
-			 (ws1spath (concatenate 'string
-				     *pvs-path* "/src/WS1S/" platform))
-			 #+allegro
-			 (yicespath (concatenate 'string
-				      *pvs-path* "/src/nlyices/" platform)))
-		    (load (format nil "~a/file_utils.~a"
-			    utilpath *load-foreign-extension*))
-		    (load (format nil "~a/mu.~a"
-			    bddpath *load-foreign-extension*))
-		    (load (format nil "~a/ws1s.~a"
-			    ws1spath *load-foreign-extension*))
-		    #+allegro
-		    (let ((libyices (format nil "~a/libyices.~a"
-				      yicespath *load-foreign-extension*)))
-		      (when (probe-file libyices)
-			(load libyices)
-			(setq *pvs-has-libyices* t))))
-		  (setq *pvs-system-loaded* t))
+                  (proclaim '(optimize (compilation-speed 0) (space 1)
+                              (safety 1) (speed 3) (debug 1)))
+                  ;; Note that these do very little SBCL simply does
+                  ;; not want to shut up
+                  #+sbcl
+                  (declaim (sb-ext:muffle-conditions cl:warning))
+                  #+sbcl
+                  (declaim (sb-ext:muffle-conditions cl:style-warning))
+                  #+sbcl
+                  (declaim (sb-ext:muffle-conditions sb-ext:compiler-note))
+                  (unless (boundp '*print-pprint-dispatch*)
+                    #-gcl
+                    (load (format nil "~a/src/xp" *pvs-path*))
+                    #+gcl
+                    (load (format nil "~a/src/xp-code" *pvs-path*))
+                    #-sbcl
+                    (apply (find-symbol :install :xp) :package :pvs nil)
+                    #+sbcl
+                    (apply (find-symbol "INSTALL" (find-package :xp))
+                           :package :pvs nil))
+                  #-(or cmu sbcl)
+                  (load (format nil "~a/ess/dist-ess.lisp" *pvs-path*))
+                  #-gcl
+                  (generate-ess ergolisp)
+                  #+gcl
+                  (load (format nil "~a/ess/allegro-runtime.lisp" *pvs-path*))
+                  #+allegro (require :loop)
+                  #+gcl (load (format nil "~a/src/loop" *pvs-path*))
+                  #-cmu18
+                  (in-package :pvs)
+                  (use-package '(:ergolisp :oper :occ :term :sort
+                                 :sb-runtime :lang :newattr))
+                  #+gcl (defmacro ignore-errors (&body forms)
+                          `(progn ,@forms))
+                  ;;#+(or cmu sbcl)
+                  ;;(let* ((platform "ix86-Linux")
+                  ;; (bddpath (concatenate 'string
+                  ;;	       *pvs-path* "/src/BDD/" platform)))
+                  ;; hack, because load-object-file isn't exported.
+                  ;; but .. it's the only way to load a *shared* object file!
+                  ;; (with cmucl1.8e, anyway)
+
+                  ;; SO - If we load here, the resulting image will create
+                  ;; a segmentation fault, even if we reload at startup.
+                  ;; So instead, we only load at startup (see pvs-init
+                  ;; in src/pvs.lisp)
+
+                  ;;(ext:load-foreign (format nil "~a/mu.so" bddpath))
+                  ;;)
+                  #+(and allegro dynload)
+                  (let* ((platform #+(and sun4 sunos4) "sun4-SunOS4"
+                                   #+(and sun4 (not sunos4)) "sun4-SunOS5"
+                                   #+(and x86 (not macosx)) "ix86-Linux"
+                                   #+(and x86-64 (not macosx)) "ix86_64-Linux"
+                                   #+(and macosx powerpc) "powerpc-MacOSX"
+                                   #+(and macosx (or x86 x86-64)) "ix86-MacOSX")
+                         (utilpath (concatenate 'string
+                                                *pvs-path* "/src/utils/" platform))
+                         (bddpath (concatenate 'string
+                                               *pvs-path* "/src/BDD/" platform))
+                         (ws1spath (concatenate 'string
+                                                *pvs-path* "/src/WS1S/" platform))
+                         #+allegro
+                         (yicespath (concatenate 'string
+                                                 *pvs-path* "/src/nlyices/" platform)))
+                    (load (format nil "~a/file_utils.~a"
+                                  utilpath *load-foreign-extension*))
+                    (load (format nil "~a/mu.~a"
+                                  bddpath *load-foreign-extension*))
+                    (load (format nil "~a/ws1s.~a"
+                                  ws1spath *load-foreign-extension*))
+                    #+allegro
+                    (let ((libyices (format nil "~a/libyices.~a"
+                                            yicespath *load-foreign-extension*)))
+                      (when (probe-file libyices)
+                        (load libyices)
+                        (setq *pvs-has-libyices* t))))
+                  (setq *pvs-system-loaded* t))
   :finally-do (progn
 		(pvs::clear-pvs-hooks)
 		#+allegro
@@ -310,284 +310,286 @@
 		)
   :components
   ((:module ground-prover
-     :source-pathname "src/ground-prover/"
-     :components ((:file "prmacros")
-		  (:file "interface"
-			 :depends-on ("prmacros"))
-		  (:file "prglobals"
-			 :depends-on ("prmacros"))
-		  (:file "process"
-			 :depends-on ("prmacros"))
-		  (:file "arrays"
-			 :depends-on ("prmacros"))
-		  (:file "tuples"
-			 :depends-on ("prmacros"))
-		  (:file "arith"
-			 :depends-on ("prmacros"))
-		  (:file "q"
-			 :depends-on ("prmacros"))
-		  ))
+    :source-pathname "src/ground-prover/"
+    :components ((:file "prmacros")
+                 (:file "interface"
+                  :depends-on ("prmacros"))
+                 (:file "prglobals"
+                  :depends-on ("prmacros"))
+                 (:file "process"
+                  :depends-on ("prmacros"))
+                 (:file "arrays"
+                  :depends-on ("prmacros"))
+                 (:file "tuples"
+                  :depends-on ("prmacros"))
+                 (:file "arith"
+                  :depends-on ("prmacros"))
+                 (:file "q"
+                  :depends-on ("prmacros"))
+                 ))
    (:module classes
-     :source-pathname "src/"
-     :components ((:file "linked-hash-table")
-		  (:file "store-object")
-		  (:file "defcl")
-		  (:file "classes-expr"
-			 :depends-on ("defcl"))
-		  (:file "classes-decl"
-			 :depends-on ("defcl"))
-		  (:file "prover/estructures"
-			 :depends-on ("defcl"))
-		  (:file "groundeval/pvs2c-utils" ; has macros
-			 :depends-on ("defcl"))))
+    :source-pathname "src/"
+    :components ((:file "linked-hash-table")
+                 (:file "store-object")
+                 (:file "defcl")
+                 (:file "classes-expr"
+                  :depends-on ("defcl"))
+                 (:file "classes-decl"
+                  :depends-on ("defcl"))
+                 (:file "prover/estructures"
+                  :depends-on ("defcl"))
+                 (:file "groundeval/pvs2c-utils" ; has macros
+                  :depends-on ("defcl"))))
    (:module macros
-     :source-pathname "src/"
-     :components ((:file "macros")
-		  (:file "prover/checker-macros")
-		  (:file "prover/decision-procedure-interface")
-		  (:file "groundeval/eval-macros")
-		  (:file "globals")
-		  (:file "optimize")
-		  (:file "makes")))
+    :source-pathname "src/"
+    :components ((:file "macros")
+                 (:file "prover/checker-macros")
+                 (:file "prover/decision-procedure-interface")
+                 (:file "groundeval/eval-macros")
+                 (:file "globals")
+                 (:file "optimize")
+                 (:file "makes")))
    (:module utils
-     :source-pathname "src/utils"
-     :components ((:file "hashfn")
-		  #+allegro
-		  (:file "file-utils")
-		  #+sbcl
-		  (:file "file-utils-sbcl")
-		  #+cmu
-		  (:file "file-utils-cmu")))
+    :source-pathname "src/utils"
+    :components ((:file "hashfn")
+                 #+allegro
+                 (:file "file-utils")
+                 #+sbcl
+                 (:file "file-utils-sbcl")
+                 #+cmu
+                 (:file "file-utils-cmu")))
    (:module pvs2c
-     :source-pathname "src/"
-     :components((:file "groundeval/pvs2c-types")
-		 (:file "groundeval/pvs2c-code")
-		 (:file "groundeval/pvs2c-analysis")
-		 (:file "groundeval/pvs2ir")))
+    :source-pathname "src/"
+    :components((:file "groundeval/pvs2c-types")
+                (:file "groundeval/pvs2c-code")
+                (:file "groundeval/pvs2c-analysis")
+                (:file "groundeval/pvs2ir")))
    (:module pvs-methods
-     :source-pathname "src/"
-     :components((:file "pvs-methods"
-			:initially-do
-			(pvs::write-deferred-methods-to-file))))
+    :source-pathname "src/"
+    :components((:file "pvs-methods"
+                 :initially-do
+                 (pvs::write-deferred-methods-to-file))))
    (:module language
-     :source-pathname "src/"
-     :components ((:file "ergo-runtime-fixes")
-		  ;;(:file "ergo-tex-fixes")
-		  (:file "pvs-lang-def")
-		  (:file "pvs-lexer")
-		  (:file "pvs-parser")
-		  ;;(:file "pvs-unparser")
-		  (:file "pvs-sorts")
-		  (:file "pvs-parse-fixes"))
-     :depends-on (classes))
+    :source-pathname "src/"
+    :components ((:file "ergo-runtime-fixes")
+                 ;;(:file "ergo-tex-fixes")
+                 (:file "pvs-lang-def")
+                 (:file "pvs-lexer")
+                 (:file "pvs-parser")
+                 ;;(:file "pvs-unparser")
+                 (:file "pvs-sorts")
+                 (:file "pvs-parse-fixes"))
+    :depends-on (classes))
    (:module basic
-     :source-pathname "src/"
-     :components (;;(:file "makes")
-		  (:file "parse")
-		  #-(or allegro sbcl)
-		  (:file "md5")
-		  (:file "context")
-		  (:file "workspaces")
-		  (:file "pp")
-		  (:file "print-object")
-		  (:file "equalities")
-		  (:file "utils")
-		  (:file "gensubst")
-		  (:file "substit"))
-     :depends-on (language macros))
+    :source-pathname "src/"
+    :components (;;(:file "makes")
+                 (:file "parse")
+                 #-(or allegro sbcl)
+                 (:file "md5")
+                 (:file "context")
+                 (:file "workspaces")
+                 (:file "pp")
+                 (:file "print-object")
+                 (:file "equalities")
+                 (:file "utils")
+                 (:file "gensubst")
+                 (:file "substit"))
+    :depends-on (language macros))
    (:module interface
-     :source-pathname "src/interface"
-     :components ((:file "pvs-emacs")
-		  (:file "emacs-calls")
-		  (:file "ilisp-pkg")
-		  (:file "cl-ilisp")
-		  #+allegro
-		  (:file "allegro")
-		  #+cmu
-		  (:file "cmulisp")
-		  ))
+    :source-pathname "src/interface"
+    :components ((:file "pvs-emacs")
+                 (:file "emacs-calls")
+                 (:file "ilisp-pkg")
+                 (:file "cl-ilisp")
+                 #+allegro
+                 (:file "allegro")
+                 #+cmu
+                 (:file "cmulisp")
+                 ))
    (:module typechecker
-     :source-pathname "src/"
-     :components ((:file "freeparams")
-		  (:file "subst-mod-params")
-		  (:file "tc-unify")
-		  (:file "resolve")
-		  (:file "tcc-gen")
-		  (:file "set-type")
-		  (:file "check-for-tccs")
-		  (:file "tcexprs")
-		  (:file "tcdecls")
-		  (:file "conversions")
-		  (:file "judgements")
-		  (:file "xref")
-		  (:file "occurs-in")
-		  (:file "datatype")
-		  (:file "typecheck")
-		  (:file "tclib"))
-     :depends-on (basic))
+    :source-pathname "src/"
+    :components ((:file "freeparams")
+                 (:file "subst-mod-params")
+                 (:file "tc-unify")
+                 (:file "resolve")
+                 (:file "tcc-gen")
+                 (:file "set-type")
+                 (:file "check-for-tccs")
+                 (:file "tcexprs")
+                 (:file "tcdecls")
+                 (:file "conversions")
+                 (:file "judgements")
+                 (:file "xref")
+                 (:file "occurs-in")
+                 (:file "datatype")
+                 (:file "typecheck")
+                 (:file "tclib"))
+    :depends-on (basic))
    (:module user-interface
-     :source-pathname "src/"
-     :components (;;(:file "restore-types")
-		  (:file "compare")
-		  (:file "untypecheck")
-		  (:file "copy-lex")
-		  (:file "save-theories")
-		  (:file "pvs")
-		  (:file "status-cmds")
-		  (:file "add-decl")
-		  (:file "list-decls")
-		  (:file "pp-tex")
-		  (:file "tex-support")
-		  (:file "pp-html")
-		  (:file "pp-xml")
-		  (:file "raw-api"))
-     :depends-on (basic))
+    :source-pathname "src/"
+    :components (;;(:file "restore-types")
+                 (:file "compare")
+                 (:file "untypecheck")
+                 (:file "copy-lex")
+                 (:file "save-theories")
+                 (:file "pvs")
+                 (:file "status-cmds")
+                 (:file "add-decl")
+                 (:file "list-decls")
+                 (:file "pp-tex")
+                 (:file "tex-support")
+                 (:file "pp-html")
+                 (:file "pp-xml")
+                 (:file "dk-sig")
+                 (:file "pp-dk3" :depends-on ("dk-sig"))
+                 (:file "raw-api"))
+    :depends-on (basic))
    (:module proof-checker
-     :source-pathname "src/prover/"
-     :components ((:file "translate-to-prove")
-		  (:file "eproofcheck")
-		  (:file "proofrules")
-		  (:file "equantifiers")
-		  (:file "freevars")
-		  (:file "rewrites")
-		  (:file "assert")
-		  (:file "beta-reduce")
-		  (:file "replace")
-		  (:file "expand")
-		  (:file "match")
-		  (:file "rules")
-		  (:file "strategies")
-		  (:file "wish")
-		  (:file "translate-to-yices")
-		  (:file "translate-to-yices2"))
-     :depends-on (typechecker))
+    :source-pathname "src/prover/"
+    :components ((:file "translate-to-prove")
+                 (:file "eproofcheck")
+                 (:file "proofrules")
+                 (:file "equantifiers")
+                 (:file "freevars")
+                 (:file "rewrites")
+                 (:file "assert")
+                 (:file "beta-reduce")
+                 (:file "replace")
+                 (:file "expand")
+                 (:file "match")
+                 (:file "rules")
+                 (:file "strategies")
+                 (:file "wish")
+                 (:file "translate-to-yices")
+                 (:file "translate-to-yices2"))
+    :depends-on (typechecker))
    (:module bdd
-     :source-pathname "src/BDD"
-     :components ((:file "bdd")
-		  #+allegro
-		  (:file "bdd-allegro")
-		  ;; bdd-cmu not loaded here, as the resulting image does not
-		  ;; work.  See pvs-init.
-		  ;;#+(or cmu sbcl)
-		  ;;(:file "bdd-cmu")
-		  )
-     :depends-on (proof-checker))
+    :source-pathname "src/BDD"
+    :components ((:file "bdd")
+                 #+allegro
+                 (:file "bdd-allegro")
+                 ;; bdd-cmu not loaded here, as the resulting image does not
+                 ;; work.  See pvs-init.
+                 ;;#+(or cmu sbcl)
+                 ;;(:file "bdd-cmu")
+                 )
+    :depends-on (proof-checker))
    (:module mu-simplifier
-     :source-pathname "src/BDD"
-     :components ((:file "mu")
-		  #+allegro
-		  (:file "mu-allegro")
-		  ;; mu-cmu not loaded here, as the resulting image does not
-		  ;; work.  See pvs-init.
-		  ;;#+(or cmu sbcl)
-		  ;;(:file "mu-cmu")
-		  ;;(:file "strategies")
-		  )
-     :depends-on (proof-checker))
+    :source-pathname "src/BDD"
+    :components ((:file "mu")
+                 #+allegro
+                 (:file "mu-allegro")
+                 ;; mu-cmu not loaded here, as the resulting image does not
+                 ;; work.  See pvs-init.
+                 ;;#+(or cmu sbcl)
+                 ;;(:file "mu-cmu")
+                 ;;(:file "strategies")
+                 )
+    :depends-on (proof-checker))
    (:module groundeval
-     :source-pathname "src/groundeval"
-     :components ((:file "eval-utils")
-		  (:file "ground-expr")
-		  (:file "static-update")
-		  (:file "pvseval-update")
-		  (:file "cl2pvs")
-		  (:file "generate-lisp-for-theory")
-		  (:file "random-test")
-		  (:file "pvs2clean")
-		  (:file "c-primitive-attachments"))
-     :depends-on (basic))
+    :source-pathname "src/groundeval"
+    :components ((:file "eval-utils")
+                 (:file "ground-expr")
+                 (:file "static-update")
+                 (:file "pvseval-update")
+                 (:file "cl2pvs")
+                 (:file "generate-lisp-for-theory")
+                 (:file "random-test")
+                 (:file "pvs2clean")
+                 (:file "c-primitive-attachments"))
+    :depends-on (basic))
    (:module Field
-     :source-pathname "src/Field"
-     :components ((:file "decimals")
-		  (:file "extrategies")
-		  (:file "field")))
+    :source-pathname "src/Field"
+    :components ((:file "decimals")
+                 (:file "extrategies")
+                 (:file "field")))
    (:module PVSio
-     :source-pathname "src/PVSio"
-     :components ((:file "pvs-lib")
-		  (:file "defattach")
-		  (:file "pvsio")
-		  (:file "prelude-attachments")
-		  ))
+    :source-pathname "src/PVSio"
+    :components ((:file "pvs-lib")
+                 (:file "defattach")
+                 (:file "pvsio")
+                 (:file "prelude-attachments")
+                 ))
    (:module Manip
-     :source-pathname "src/Manip"
-     :components ((:file "pregexp")
-		  (:file "manip-utilities")
-		  (:file "extended-expr")
-		  (:file "syntax-matching")
-		  (:file "manip-strategies")
-		  ;(:file "debug-utils")
-		  ))
+    :source-pathname "src/Manip"
+    :components ((:file "pregexp")
+                 (:file "manip-utilities")
+                 (:file "extended-expr")
+                 (:file "syntax-matching")
+                 (:file "manip-strategies")
+                                        ;(:file "debug-utils")
+                 ))
    (:module ProofLite
-     :source-pathname "src/ProofLite"
-     :components (;(:file "pregexp")
-		  (:file "prooflite")
-		  (:file "proveit-init")))
+    :source-pathname "src/ProofLite"
+    :components (;(:file "pregexp")
+                 (:file "prooflite")
+                 (:file "proveit-init")))
    (:module ws1s
-	    :source-pathname "src/WS1S/lisp"
-	    :components (#+allegro
-			 (:file "dfa-foreign")
-			 ;; dfa-foreign-cmu not loaded here, as the
-			 ;; resulting image does not work.  See pvs-init.
-			 ;; #+cmu (:file "dfa-foreign-cmu")
-			 (:file "dfa")
-			 (:file "pvs-utils")
-			 (:file "symtab")
-			 (:file "signature")
-			 (:file "pvs2dfa")
-			 (:file "ws1s-strategy")
-			 (:file "presburger")))
+    :source-pathname "src/WS1S/lisp"
+    :components (#+allegro
+                 (:file "dfa-foreign")
+                 ;; dfa-foreign-cmu not loaded here, as the
+                 ;; resulting image does not work.  See pvs-init.
+                 ;; #+cmu (:file "dfa-foreign-cmu")
+                 (:file "dfa")
+                 (:file "pvs-utils")
+                 (:file "symtab")
+                 (:file "signature")
+                 (:file "pvs2dfa")
+                 (:file "ws1s-strategy")
+                 (:file "presburger")))
    (:module abstraction
-	    :source-pathname "src/abstraction"
-	    :components ((:file "abstract")))
+    :source-pathname "src/abstraction"
+    :components ((:file "abstract")))
    (:module rahd
-     :source-pathname "src/rahd"
-     :components ((:file "rahd")
-		  (:file "polyalg")
-		  (:file "polyeval")
-		  (:file "polyconv")
-		  (:file "sturm")
-		  (:file "sturmineq")
-		  (:file "strings")
-		  (:file "ineqfert")
-		  (:file "canonizer")
-		  (:file "ideals")
-		  (:file "opencad")
-		  (:file "cocoa")
-		  (:file "cases")
-		  (:file "realnull")
-		  (:file "cauchyeval")
-		  (:file "intgrldom")
-		  (:file "demodlin")
-		  (:file "demodnl")
-		  (:file "plinsolver")
-		  (:file "intsplit")
-		  (:file "interval")
-		  (:file "intvlcp")
-		  (:file "gbrnull")
-		  (:file "cnf")
-		  (:file "division")
-		  (:file "quicksat")
-		  (:file "prover")
-		  (:file "abbrevs")
-		  (:file "regression")
-		  (:file "debug")
-		  (:file "prfanal")
-		  (:file "rahd-pvs")))
+    :source-pathname "src/rahd"
+    :components ((:file "rahd")
+                 (:file "polyalg")
+                 (:file "polyeval")
+                 (:file "polyconv")
+                 (:file "sturm")
+                 (:file "sturmineq")
+                 (:file "strings")
+                 (:file "ineqfert")
+                 (:file "canonizer")
+                 (:file "ideals")
+                 (:file "opencad")
+                 (:file "cocoa")
+                 (:file "cases")
+                 (:file "realnull")
+                 (:file "cauchyeval")
+                 (:file "intgrldom")
+                 (:file "demodlin")
+                 (:file "demodnl")
+                 (:file "plinsolver")
+                 (:file "intsplit")
+                 (:file "interval")
+                 (:file "intvlcp")
+                 (:file "gbrnull")
+                 (:file "cnf")
+                 (:file "division")
+                 (:file "quicksat")
+                 (:file "prover")
+                 (:file "abbrevs")
+                 (:file "regression")
+                 (:file "debug")
+                 (:file "prfanal")
+                 (:file "rahd-pvs")))
    #+allegro
    (:module nlyices
-     :source-pathname "src/nlyices"
-     :components ((:file "polyrep-totdeglex")
-		  (:file "decide3_2a")
-		  (:file "vts")
-		  (:file "nlsolver")
-		  (:file "named-callbacks")
-		  (:file "fcpo")
-		  (:file "nlyices")))
+    :source-pathname "src/nlyices"
+    :components ((:file "polyrep-totdeglex")
+                 (:file "decide3_2a")
+                 (:file "vts")
+                 (:file "nlsolver")
+                 (:file "named-callbacks")
+                 (:file "fcpo")
+                 (:file "nlyices")))
    #+allegro
    (:module xmlrpc
-     :source-pathname "src/interface"
-     :components ((:file "pvs-json-rpc")
-		  (:file "pvs-json")
-		  (:file "pvs-json-methods")
-		  (:file "pvs-xml-rpc")))
+    :source-pathname "src/interface"
+    :components ((:file "pvs-json-rpc")
+                 (:file "pvs-json")
+                 (:file "pvs-json-methods")
+                 (:file "pvs-xml-rpc")))
    ))

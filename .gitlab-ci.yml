@@ -1,0 +1,20 @@
+include:
+    - template: 'Workflows/Branch-Pipelines.gitlab-ci.yml'
+
+image: alpine:edge
+
+before_script:
+    - apk add --no-cache emacs ksh
+    - |
+      url='https://downloads.sourceforge.net/project/sbcl/sbcl/1.4.16/sbcl-1.4.16-x86-64-linux-binary.tar.bz2'
+      (cd "$HOME" || exit 1
+      curl "$url" -L | tar xj
+      ln -s sbcl* sbcl)
+    - autoconf
+    - ./configure
+    - EMACS=$(command -v emacs) SBCLISP_HOME="${HOME}/sbcl" make >output 2>&1
+
+translate:
+  script:
+    - PVS=./pvs ./pvs2dk.sh -s translation/simple
+    - PVS=./pvs ./pvs2dk.sh -s translation/prelude
