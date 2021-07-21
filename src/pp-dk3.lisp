@@ -529,7 +529,7 @@ the declaration of TYPE FROM."
 
 (defmethod pp-dk (stream (decl type-decl) &optional colon-p at-sign-p)
   "t: TYPE."
-  (dklog:decl "type decl")
+  (dklog:decl "type decl ~S" (id decl))
   (with-slots (id) decl
     (with-sig-update (newid id nil *signature* *opened-signatures*)
       (format stream "constant symbol ~/pvs:pp-sym/: " newid)
@@ -538,7 +538,7 @@ the declaration of TYPE FROM."
 
 (defmethod pp-dk (stream (decl type-eq-decl) &optional colon-p at-sign-p)
   "t: TYPE = x, but also domain(f): TYPE = D"
-  (dklog:decl "type-eq-decl")
+  (dklog:decl "type-eq-decl ~a" decl)
   (with-slots (id type-expr formals) decl
     (with-sig-update (newid id nil *signature* *opened-signatures*)
       (format stream "symbol ~/pvs:pp-sym/: " newid)
@@ -558,7 +558,7 @@ the declaration of TYPE FROM."
 (defmethod pp-dk (stream (decl type-from-decl) &optional colon-p at-sign-p)
   "t: TYPE FROM s"
   (dklog:contexts "type from" decl)
-  (dklog:decl "type-from-decl")
+  (dklog:decl "type-from-decl ~S" (id decl))
   (with-slots (id predicate supertype) decl
     (with-sig-update (newid id nil *signature* *opened-signatures*)
       ;; PREDICATE is a type declaration
@@ -728,13 +728,11 @@ definitions are expanded, and the translation becomes too large."
 
 (defmethod pp-dk (stream (te subtype) &optional colon-p at-sign-p)
   "{n: nat | n /= zero} or (x | p(x)), see classes-decl.lisp:824"
-  (dklog:type "subtype")
+  (declare (ignore at-sign-p))
+  (dklog:type "subtype ~a" te)
   (with-slots (supertype predicate) te
     (with-parens (stream colon-p)
-      (write-string "@psub " stream)
-      (assert supertype)
-      (format stream "~:/pvs:pp-dk/ " supertype)
-      (pp-dk stream predicate t at-sign-p))))
+      (format stream "psub {~/pvs:pp-dk/} ~:/pvs:pp-dk/" supertype predicate))))
 
 (defmethod pp-dk (stream (te expr-as-type) &optional colon-p at-sign-p)
   "Used in e.g. (equivalence?), that is, a parenthesised expression used as a
@@ -872,15 +870,15 @@ to its first element."
 (defmethod pp-dk (stream (te set-expr) &optional colon-p at-sign-p)
   "{n: nat | p(x)}, but an expression, it's only syntactic sugar for LAMBDA (n:
 nat): p(x)"
-  (dklog:type "set-expr")
+  (dklog:type "set-expr ~a" te)
   (with-slots (expression bindings) te
     ;; `binding' should contain one binding
-    (assert (consp bindings))
-    (with-slots (id) (car bindings)
-      ;; NOTE: the binding is untyped, can we merge with `lambda-expr'?
+    (assert (single bindings))
+    (with-slots (id declared-type type) (car bindings)
+      (assert (or declared-type type))
       (with-parens (stream colon-p)
-        (format stream "λ ~/pvs:pp-sym/, ~:/pvs:pp-dk/"
-                id expression)))))
+        (format stream "λ ~/pvs:pp-sym/: ~/pvs:pp-type/, ~:/pvs:pp-dk/"
+                id (or declared-type type) expression)))))
 
 (defmethod pp-dk (stream (ex quant-expr) &optional wrap _at-sign-p)
   (dklog:expr "quantified expression ~S" ex)
